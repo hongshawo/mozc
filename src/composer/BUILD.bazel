@@ -55,7 +55,6 @@ mozc_cc_library(
         "//engine:__pkg__",
         "//request:__pkg__",
         "//session:__pkg__",
-        "//unix/emacs:__pkg__",
     ],
     deps = [
         ":composition",
@@ -132,6 +131,7 @@ mozc_cc_library(
         "//protocol:commands_cc_proto",
         "//protocol:config_cc_proto",
         "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/hash",
@@ -208,7 +208,6 @@ mozc_cc_library(
     hdrs = ["key_parser.h"],
     visibility = [
         "//client:__pkg__",
-        "//converter:__pkg__",
         "//gui/config_dialog:__pkg__",
         "//session:__pkg__",
         "//unix/emacs:__pkg__",

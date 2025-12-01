@@ -59,7 +59,7 @@ class TestCPUStats : public CPUStatsInterface {
   }
 
   float GetSystemCPULoad() override {
-    absl::MutexLock lock(&mutex_);
+    absl::MutexLock lock(mutex_);
     CHECK_GT(cpu_loads_.size(), 0);
     float load = cpu_loads_.back();
     cpu_loads_.pop_back();
@@ -71,7 +71,7 @@ class TestCPUStats : public CPUStatsInterface {
   size_t GetNumberOfProcessors() const override { return size_t{1}; }
 
   void Set(std::vector<float> cpu_loads) {
-    absl::MutexLock lock(&mutex_);
+    absl::MutexLock lock(mutex_);
     cpu_loads_ = std::move(cpu_loads);
     std::reverse(cpu_loads_.begin(), cpu_loads_.end());
   }
@@ -83,8 +83,8 @@ class TestCPUStats : public CPUStatsInterface {
 
 }  // namespace
 
-client::ClientMock *CreateMockClient() {
-  auto *client = new client::ClientMock();
+client::ClientMock* CreateMockClient() {
+  auto* client = new client::ClientMock();
   EXPECT_CALL(*client, PingServer()).WillRepeatedly(Return(true));
   ON_CALL(*client, Cleanup()).WillByDefault(Return(true));
   return client;
@@ -92,7 +92,7 @@ client::ClientMock *CreateMockClient() {
 
 TEST(SessionWatchDogTest, SessionWatchDogTest) {
   constexpr absl::Duration kInterval = absl::Seconds(1);
-  auto *client = CreateMockClient();
+  auto* client = CreateMockClient();
   auto stats = std::make_unique<TestCPUStats>(std::vector<float>(5, 0.0f));
   EXPECT_CALL(*client, Cleanup()).Times(5);
 
@@ -108,8 +108,8 @@ TEST(SessionWatchDogTest, SessionWatchDogTest) {
 
 TEST(SessionWatchDogTest, SessionWatchDogCPUStatsTest) {
   constexpr absl::Duration kInterval = absl::Seconds(1);
-  auto *client = CreateMockClient();
-  auto *cpu_loads = new TestCPUStats(std::vector<float>(5, 0.8f));
+  auto* client = CreateMockClient();
+  auto* cpu_loads = new TestCPUStats(std::vector<float>(5, 0.8f));
 
   mozc::SessionWatchDog watchdog(kInterval, absl::WrapUnique(client),
                                  absl::WrapUnique(cpu_loads));

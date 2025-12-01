@@ -37,6 +37,8 @@
 #include "absl/strings/string_view.h"
 #include "base/text_normalizer.h"
 #include "base/util.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
 #include "converter/segments.h"
 #include "engine/candidate_list.h"
 #include "protocol/candidate_window.pb.h"
@@ -47,16 +49,16 @@ namespace mozc {
 namespace engine {
 
 struct DummySegment {
-  const char *value;
+  const char* value;
   const int32_t usage_id;
-  const char *usage_title;
-  const char *usage_description;
+  const char* usage_title;
+  const char* usage_description;
 };
 
-void FillDummySegment(const DummySegment *dummy_segments, const size_t num,
-                      Segment *segment, CandidateList *candidate_list) {
+void FillDummySegment(const DummySegment* dummy_segments, const size_t num,
+                      Segment* segment, CandidateList* candidate_list) {
   for (size_t i = 0; i < num; ++i) {
-    Segment::Candidate *cand = segment->push_back_candidate();
+    converter::Candidate* cand = segment->push_back_candidate();
     candidate_list->AddCandidate(i, dummy_segments[i].value);
     cand->value = dummy_segments[i].value;
     cand->usage_id = dummy_segments[i].usage_id;
@@ -75,6 +77,7 @@ TEST(EngineOutputTest, FillCandidate) {
   const std::string kPrefix42 = "prefix";
   const std::string kSuffix42 = "suffix";
   const std::string kDescription42 = "description";
+  const std::string kDisplayValue42 = "display_value";
   const std::string kSubcandidateList = "Subcandidates";
 
   // Make 100 candidates
@@ -86,6 +89,7 @@ TEST(EngineOutputTest, FillCandidate) {
   segment.mutable_candidate(42)->prefix = kPrefix42;
   segment.mutable_candidate(42)->suffix = kSuffix42;
   segment.mutable_candidate(42)->description = kDescription42;
+  segment.mutable_candidate(42)->display_value = kDisplayValue42;
 
   candidate.set_id(13);
   output::FillCandidate(segment, candidate, &candidate_proto);
@@ -103,10 +107,11 @@ TEST(EngineOutputTest, FillCandidate) {
   EXPECT_EQ(candidate_proto.annotation().prefix(), kPrefix42);
   EXPECT_EQ(candidate_proto.annotation().suffix(), kSuffix42);
   EXPECT_EQ(candidate_proto.annotation().description(), kDescription42);
+  EXPECT_EQ(candidate_proto.annotation().display_value(), kDisplayValue42);
 
   candidate.Clear();
   candidate_proto.Clear();
-  CandidateList *candidate_list = candidate.mutable_subcandidate_list();
+  CandidateList* candidate_list = candidate.mutable_subcandidate_list();
   candidate_list->set_rotate(true);
   candidate_list->set_name(kSubcandidateList);
   static constexpr int kFirstIdInSubList = -123;
@@ -126,7 +131,7 @@ TEST(EngineOutputTest, FillCandidateWindow) {
   commands::CandidateWindow candidate_window_proto;
 
   const std::string kSubcandidateList = "Subcandidates";
-  const char *kValues[5] = {"0", "1", "2:sub0", "3:sub1", "4:sub2"};
+  const char* kValues[5] = {"0", "1", "2:sub0", "3:sub1", "4:sub2"};
 
   // Make 5 candidates
   for (size_t i = 0; i < 5; ++i) {
@@ -137,7 +142,7 @@ TEST(EngineOutputTest, FillCandidateWindow) {
   candidate_list.set_page_size(9);
   candidate_list.AddCandidate(0, "0");
   candidate_list.AddCandidate(1, "1");
-  CandidateList *subcandidate_list = candidate_list.AddSubCandidateList();
+  CandidateList* subcandidate_list = candidate_list.AddSubCandidateList();
   subcandidate_list->set_focused(true);
   subcandidate_list->set_rotate(true);
   subcandidate_list->set_name(kSubcandidateList);
@@ -235,36 +240,39 @@ TEST(EngineOutputTest, FillAllCandidateWords) {
 
   // Initialize Segment
   Segment segment;
-  const char *kNormalKey = "key";
+  const char* kNormalKey = "key";
   segment.set_key(kNormalKey);
-  const char *kDescription = "desc";
+  const char* kDescription = "desc";
 
-  const char *kValues[7] = {"2",      "sub1_1",    "sub1_3",   "sub2_1",
+  const char* kValues[7] = {"2",      "sub1_1",    "sub1_3",   "sub2_1",
                             "sub2_2", "subsub1_1", "subsub1_2"};
   constexpr size_t kValueSize = std::size(kValues);
   for (size_t i = 0; i < kValueSize; ++i) {
-    Segment::Candidate *candidate = segment.push_back_candidate();
+    converter::Candidate* candidate = segment.push_back_candidate();
     candidate->content_key = kNormalKey;
     candidate->value = kValues[i];
     candidate->description = kDescription;
     for (size_t j = 0; j < i; ++j) {
-      candidate->PushBackInnerSegmentBoundary(1, 1, 1, 1);
+      // Puts placeholder lengths.
+      // This field is used to determine the size of inner segments.
+      // TODO(taku): Stop exposing internal data structure.
+      candidate->inner_segment_boundary.push_back(1);
     }
   }
   // Set special key to ID:4 / Index:6
-  const char *kSpecialKey = "Special Key";
+  const char* kSpecialKey = "Special Key";
   segment.mutable_candidate(4)->content_key = kSpecialKey;
 
   // Main
-  CandidateList *sub1 = main_list.AddSubCandidateList();
+  CandidateList* sub1 = main_list.AddSubCandidateList();
   sub1->set_rotate(true);
   main_list.AddCandidate(0, kValues[0]);
-  CandidateList *sub2 = main_list.AddSubCandidateList();
+  CandidateList* sub2 = main_list.AddSubCandidateList();
   sub2->set_rotate(true);
 
   // Sub1
   sub1->AddCandidate(1, kValues[1]);
-  CandidateList *subsub1 = sub1->AddSubCandidateList();
+  CandidateList* subsub1 = sub1->AddSubCandidateList();
   subsub1->set_rotate(true);
   sub1->AddCandidate(2, kValues[2]);
 
@@ -353,14 +361,14 @@ TEST(EngineOutputTest, FillAllCandidateWords_Attributes) {
 
   // Initialize Segment
   Segment segment;
-  const char *kKey = "key";
+  const char* kKey = "key";
   segment.set_key(kKey);
 
-  const char *kValues[5] = {"value_0", "value_1", "value_2", "value_3",
+  const char* kValues[5] = {"value_0", "value_1", "value_2", "value_3",
                             "value_4"};
   constexpr size_t kValueSize = std::size(kValues);
   for (size_t i = 0; i < kValueSize; ++i) {
-    Segment::Candidate *candidate = segment.push_back_candidate();
+    converter::Candidate* candidate = segment.push_back_candidate();
     candidate->content_key = kKey;
     candidate->value = kValues[i];
 
@@ -368,16 +376,16 @@ TEST(EngineOutputTest, FillAllCandidateWords_Attributes) {
   }
 
   segment.mutable_candidate(1)->attributes =
-      Segment::Candidate::Attribute::USER_DICTIONARY;
+      converter::Attribute::USER_DICTIONARY;
   segment.mutable_candidate(2)->attributes =
-      Segment::Candidate::Attribute::USER_HISTORY_PREDICTION |
-      Segment::Candidate::Attribute::NO_VARIANTS_EXPANSION;
+      converter::Attribute::USER_HISTORY_PREDICTION |
+      converter::Attribute::NO_VARIANTS_EXPANSION;
   segment.mutable_candidate(3)->attributes =
-      Segment::Candidate::Attribute::SPELLING_CORRECTION |
-      Segment::Candidate::Attribute::NO_EXTRA_DESCRIPTION;
+      converter::Attribute::SPELLING_CORRECTION |
+      converter::Attribute::NO_EXTRA_DESCRIPTION;
   segment.mutable_candidate(4)->attributes =
-      Segment::Candidate::Attribute::TYPING_CORRECTION |
-      Segment::Candidate::Attribute::BEST_CANDIDATE;
+      converter::Attribute::TYPING_CORRECTION |
+      converter::Attribute::BEST_CANDIDATE;
 
   candidate_list.set_focused(true);
   candidate_list.MoveToId(0);
@@ -743,7 +751,7 @@ TEST(EngineOutputTest, FillFooter) {
 
   candidate_window.Clear();
   for (int i = 0; i < 20; ++i) {
-    commands::CandidateWindow::Candidate *c = candidate_window.add_candidate();
+    commands::CandidateWindow::Candidate* c = candidate_window.add_candidate();
     c->set_index(i);
     c->set_value("dummy");
     c->set_id(i);
@@ -796,7 +804,7 @@ TEST(EngineOutputTest, AddSegment) {
     const int types = output::PREEDIT | output::FOCUSED;
     EXPECT_TRUE(output::AddSegment(kKey, kValue, types, &preedit));
     EXPECT_EQ(preedit.segment_size(), index + 1);
-    const commands::Preedit::Segment &segment = preedit.segment(index);
+    const commands::Preedit::Segment& segment = preedit.segment(index);
 
     const std::string normalized_key = TextNormalizer::NormalizeText(kKey);
     EXPECT_EQ(segment.key(), normalized_key);
@@ -813,7 +821,7 @@ TEST(EngineOutputTest, AddSegment) {
     const int types = output::PREEDIT;
     EXPECT_TRUE(output::AddSegment(kKey, kValue, types, &preedit));
     EXPECT_EQ(preedit.segment_size(), index + 1);
-    const commands::Preedit::Segment &segment = preedit.segment(index);
+    const commands::Preedit::Segment& segment = preedit.segment(index);
 
     const std::string normalized_key = TextNormalizer::NormalizeText(kKey);
     EXPECT_EQ(segment.key(), normalized_key);
@@ -830,7 +838,7 @@ TEST(EngineOutputTest, AddSegment) {
     const int types = output::CONVERSION | output::FOCUSED;
     EXPECT_TRUE(output::AddSegment(kKey, kValue, types, &preedit));
     EXPECT_EQ(preedit.segment_size(), index + 1);
-    const commands::Preedit::Segment &segment = preedit.segment(index);
+    const commands::Preedit::Segment& segment = preedit.segment(index);
 
     const std::string normalized_key = TextNormalizer::NormalizeText(kKey);
     EXPECT_EQ(segment.key(), normalized_key);
@@ -848,7 +856,7 @@ TEST(EngineOutputTest, AddSegment) {
     const int types = output::CONVERSION;
     EXPECT_TRUE(output::AddSegment(kKey, kValue, types, &preedit));
     EXPECT_EQ(preedit.segment_size(), index + 1);
-    const commands::Preedit::Segment &segment = preedit.segment(index);
+    const commands::Preedit::Segment& segment = preedit.segment(index);
 
     const std::string normalized_key = TextNormalizer::NormalizeText(kKey);
     EXPECT_EQ(segment.key(), normalized_key);
@@ -911,10 +919,10 @@ TEST(EngineOutputTest, FillAllCandidateWords_NonFocused) {
 
   // Initialize Segment
   Segment segment;
-  const char *kNormalKey = "key";
+  const char* kNormalKey = "key";
   segment.set_key(kNormalKey);
 
-  Segment::Candidate *candidate = segment.push_back_candidate();
+  converter::Candidate* candidate = segment.push_back_candidate();
   candidate->content_key = "key";
   candidate->value = "value";
 
@@ -947,10 +955,10 @@ TEST(EngineOutputTest, FillRemovedCandidateWords) {
 
   // Initialize Segment
   Segment segment;
-  const char *kNormalKey = "key";
+  const char* kNormalKey = "key";
   segment.set_key(kNormalKey);
 
-  Segment::Candidate candidate;
+  converter::Candidate candidate;
   candidate.content_key = "key";
   candidate.value = "value";
   segment.removed_candidates_for_debug_.push_back(candidate);

@@ -45,9 +45,10 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "base/hash.h"
 #include "base/util.h"
 #include "base/vlog.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
 #include "converter/segments.h"
 #include "data_manager/data_manager.h"
 #include "dictionary/pos_matcher.h"
@@ -74,8 +75,7 @@ bool CollocationFilter::Exists(const absl::string_view left,
   if (left.empty() || right.empty()) {
     return false;
   }
-  const uint64_t id = Fingerprint(absl::StrCat(left, right));
-  return filter_.Exists(id);
+  return filter_.Exists({left, right});
 }
 
 absl::StatusOr<SuppressionFilter> SuppressionFilter::Create(
@@ -87,12 +87,10 @@ absl::StatusOr<SuppressionFilter> SuppressionFilter::Create(
   return SuppressionFilter(*std::move(filter));
 }
 
-bool SuppressionFilter::Exists(const Segment::Candidate &cand) const {
+bool SuppressionFilter::Exists(const converter::Candidate& cand) const {
   // TODO(noriyukit): We should share key generation rule with
   // gen_collocation_suppression_data_main.cc.
-  const uint64_t id =
-      Fingerprint(absl::StrCat(cand.content_value, "\t", cand.content_key));
-  return filter_.Exists(id);
+  return filter_.Exists({cand.content_value, "\t", cand.content_key});
 }
 
 }  // namespace collocation_rewriter_internal
@@ -128,8 +126,8 @@ bool ContainsNumber(const absl::string_view str) {
 // the value isn't of the form XXXPPPYYY.
 bool ParseCompound(const absl::string_view value,
                    const absl::string_view pattern,
-                   absl::string_view *first_content,
-                   absl::string_view *second) {
+                   absl::string_view* first_content,
+                   absl::string_view* second) {
   DCHECK(!value.empty());
   DCHECK(!pattern.empty());
 
@@ -170,7 +168,7 @@ bool ParseCompound(const absl::string_view value,
 void ResolveCompoundSegment(const absl::string_view top_value,
                             const absl::string_view value,
                             const SegmentLookupType type,
-                            std::vector<std::string> *output) {
+                            std::vector<std::string>* output) {
   // see "http://ja.wikipedia.org/wiki/助詞"
   // "の" is excluded because it is not good for collocation.
   static constexpr std::array<absl::string_view, 8> kParticles = {
@@ -196,10 +194,10 @@ void ResolveCompoundSegment(const absl::string_view top_value,
 // Generates strings for looking up collocation target for |cand|.
 // Returns true if |cand| is valid for collocation look up.
 // strings in |output| will be normalized for look up method.
-bool GenerateLookupTokens(const Segment::Candidate &cand,
-                          const Segment::Candidate &top_cand,
+bool GenerateLookupTokens(const converter::Candidate& cand,
+                          const converter::Candidate& top_cand,
                           SegmentLookupType type,
-                          std::vector<std::string> *output) {
+                          std::vector<std::string>* output) {
   absl::string_view content = cand.content_value;
   absl::string_view value = cand.value;
   absl::string_view top_content = top_cand.content_value;
@@ -439,23 +437,23 @@ bool GenerateLookupTokens(const Segment::Candidate &cand,
 }
 
 // Just a wrapper of IsNaturalContent for debug.
-bool VerifyNaturalContent(const Segment::Candidate &cand,
-                          const Segment::Candidate &top_cand,
+bool VerifyNaturalContent(const converter::Candidate& cand,
+                          const converter::Candidate& top_cand,
                           SegmentLookupType type) {
   std::vector<std::string> nexts;
   return GenerateLookupTokens(cand, top_cand, RIGHT, &nexts);
 }
 
-inline bool IsKeyUnknown(const Segment &seg) {
+inline bool IsKeyUnknown(const Segment& seg) {
   return Util::IsScriptType(seg.key(), Util::UNKNOWN_SCRIPT);
 }
 
 }  // namespace
 
-bool CollocationRewriter::RewriteCollocation(Segments *segments) const {
+bool CollocationRewriter::RewriteCollocation(Segments* segments) const {
   // Return false if at least one segment is fixed or at least one segment
   // contains no candidates.
-  for (const Segment &seg : segments->conversion_segments()) {
+  for (const Segment& seg : segments->conversion_segments()) {
     if (seg.segment_type() == Segment::FIXED_VALUE ||
         seg.candidates_size() == 0) {
       return false;
@@ -490,7 +488,7 @@ bool CollocationRewriter::RewriteCollocation(Segments *segments) const {
       segs_changed[i] = true;
     }
 
-    const Segment::Candidate &cand = segments->segment(i).candidate(0);
+    const converter::Candidate& cand = segments->segment(i).candidate(0);
     if (i >= 2 &&
         // Cross over only adverbs
         // Segment is adverb if;
@@ -522,7 +520,7 @@ bool CollocationRewriter::RewriteCollocation(Segments *segments) const {
 }
 
 std::unique_ptr<CollocationRewriter> CollocationRewriter::Create(
-    const DataManager &data_manager) {
+    const DataManager& data_manager) {
   absl::StatusOr<CollocationFilter> collocation_filter =
       CollocationFilter::Create(data_manager.GetCollocationData());
   if (!collocation_filter.ok()) {
@@ -542,12 +540,12 @@ std::unique_ptr<CollocationRewriter> CollocationRewriter::Create(
       *std::move(collocation_filter), *std::move(suppression_filter));
 }
 
-bool CollocationRewriter::Rewrite(const ConversionRequest &request,
-                                  Segments *segments) const {
+bool CollocationRewriter::Rewrite(const ConversionRequest& request,
+                                  Segments* segments) const {
   return RewriteCollocation(segments);
 }
 
-bool CollocationRewriter::IsName(const Segment::Candidate &cand) const {
+bool CollocationRewriter::IsName(const converter::Candidate& cand) const {
   const bool ret = (cand.lid == last_name_id_ || cand.lid == first_name_id_);
   if (ret) {
     MOZC_VLOG(3) << cand.value << " is name sagment";
@@ -556,7 +554,7 @@ bool CollocationRewriter::IsName(const Segment::Candidate &cand) const {
 }
 
 bool CollocationRewriter::RewriteFromPrevSegment(
-    const Segment::Candidate &prev_cand, Segment *seg) const {
+    const converter::Candidate& prev_cand, Segment* seg) const {
   std::string prev;
   CollocationUtil::GetNormalizedScript(prev_cand.value, true, &prev);
 
@@ -588,7 +586,7 @@ bool CollocationRewriter::RewriteFromPrevSegment(
         }
         seg->move_candidate(i, 0);
         seg->mutable_candidate(0)->attributes |=
-            Segment::Candidate::CONTEXT_SENSITIVE;
+            converter::Attribute::CONTEXT_SENSITIVE;
         return true;
       }
     }
@@ -596,8 +594,8 @@ bool CollocationRewriter::RewriteFromPrevSegment(
   return false;
 }
 
-bool CollocationRewriter::RewriteUsingNextSegment(Segment *next_seg,
-                                                  Segment *seg) const {
+bool CollocationRewriter::RewriteUsingNextSegment(Segment* next_seg,
+                                                  Segment* seg) const {
   const size_t i_max = std::min(seg->candidates_size(), kCandidateSize);
   const size_t j_max = std::min(next_seg->candidates_size(), kCandidateSize);
 
@@ -656,10 +654,10 @@ bool CollocationRewriter::RewriteUsingNextSegment(Segment *next_seg,
                 << "IsNaturalContent() should not fail here.";
             seg->move_candidate(i, 0);
             seg->mutable_candidate(0)->attributes |=
-                Segment::Candidate::CONTEXT_SENSITIVE;
+                converter::Attribute::CONTEXT_SENSITIVE;
             next_seg->move_candidate(j, 0);
             next_seg->mutable_candidate(0)->attributes |=
-                Segment::Candidate::CONTEXT_SENSITIVE;
+                converter::Attribute::CONTEXT_SENSITIVE;
             return true;
           }
         }

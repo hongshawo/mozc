@@ -30,7 +30,6 @@
 #ifndef MOZC_BASE_FILE_UTIL_MOCK_H_
 #define MOZC_BASE_FILE_UTIL_MOCK_H_
 
-#include <map>
 #include <string>
 
 #include "absl/container/btree_map.h"
@@ -174,7 +173,7 @@ class FileUtilMock : public FileUtilInterface {
 
  private:
   template <typename T>
-  T At(const absl::btree_map<std::string, T> &map, zstring_view key,
+  T At(const absl::btree_map<std::string, T>& map, zstring_view key,
        zstring_view fallback_value) const {
     auto it = map.find(key);
     return it == map.end() ? std::string(fallback_value.view()) : it->second;

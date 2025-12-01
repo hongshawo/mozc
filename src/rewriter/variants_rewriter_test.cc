@@ -41,6 +41,9 @@
 #include "base/number_util.h"
 #include "base/util.h"
 #include "config/character_form_manager.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
+#include "converter/inner_segment.h"
 #include "converter/segments.h"
 #include "data_manager/testing/mock_data_manager.h"
 #include "dictionary/pos_matcher.h"
@@ -74,11 +77,11 @@ class VariantsRewriterTest : public testing::TestWithTempUserProfile {
   }
 
   static void InitSegmentsForAlphabetRewrite(const absl::string_view value,
-                                             Segments *segments) {
-    Segment *segment = segments->push_back_segment();
+                                             Segments* segments) {
+    Segment* segment = segments->push_back_segment();
     CHECK(segment);
     segment->set_key(value);
-    Segment::Candidate *candidate = segment->add_candidate();
+    converter::Candidate* candidate = segment->add_candidate();
     CHECK(candidate);
     candidate->key = std::string(value);
     candidate->content_key = std::string(value);
@@ -86,7 +89,7 @@ class VariantsRewriterTest : public testing::TestWithTempUserProfile {
     candidate->content_value = std::string(value);
   }
 
-  VariantsRewriter *CreateVariantsRewriter() const {
+  VariantsRewriter* CreateVariantsRewriter() const {
     return new VariantsRewriter(pos_matcher_);
   }
 
@@ -102,10 +105,10 @@ TEST_F(VariantsRewriterTest, RewriteTest) {
   Segments segments;
   const ConversionRequest request;
 
-  Segment *seg = segments.push_back_segment();
+  Segment* seg = segments.push_back_segment();
 
   {
-    Segment::Candidate *candidate = seg->add_candidate();
+    converter::Candidate* candidate = seg->add_candidate();
     candidate->value = "あいう";
     candidate->content_value = "あいう";
     EXPECT_FALSE(rewriter->Rewrite(request, &segments));
@@ -113,7 +116,7 @@ TEST_F(VariantsRewriterTest, RewriteTest) {
   }
 
   {
-    Segment::Candidate *candidate = seg->add_candidate();
+    converter::Candidate* candidate = seg->add_candidate();
     candidate->value = "012";
     candidate->content_value = "012";
     CharacterFormManager::GetCharacterFormManager()->SetCharacterForm(
@@ -129,10 +132,10 @@ TEST_F(VariantsRewriterTest, RewriteTest) {
   }
 
   {
-    Segment::Candidate *candidate = seg->add_candidate();
+    converter::Candidate* candidate = seg->add_candidate();
     candidate->value = "012";
     candidate->content_value = "012";
-    candidate->attributes |= Segment::Candidate::NO_VARIANTS_EXPANSION;
+    candidate->attributes |= converter::Attribute::NO_VARIANTS_EXPANSION;
     CharacterFormManager::GetCharacterFormManager()->SetCharacterForm(
         "012", Config::FULL_WIDTH);
 
@@ -142,7 +145,7 @@ TEST_F(VariantsRewriterTest, RewriteTest) {
   }
 
   {
-    Segment::Candidate *candidate = seg->add_candidate();
+    converter::Candidate* candidate = seg->add_candidate();
     candidate->value = "Google";
     candidate->content_value = "Google";
     CharacterFormManager::GetCharacterFormManager()->SetCharacterForm(
@@ -158,7 +161,7 @@ TEST_F(VariantsRewriterTest, RewriteTest) {
   }
 
   {
-    Segment::Candidate *candidate = seg->add_candidate();
+    converter::Candidate* candidate = seg->add_candidate();
     candidate->value = "@";
     candidate->content_value = "@";
     CharacterFormManager::GetCharacterFormManager()->SetCharacterForm(
@@ -174,7 +177,7 @@ TEST_F(VariantsRewriterTest, RewriteTest) {
   }
 
   {
-    Segment::Candidate *candidate = seg->add_candidate();
+    converter::Candidate* candidate = seg->add_candidate();
     candidate->value = "グーグル";
     candidate->content_value = "グーグル";
     CharacterFormManager::GetCharacterFormManager()->SetCharacterForm(
@@ -185,7 +188,7 @@ TEST_F(VariantsRewriterTest, RewriteTest) {
   }
 
   {
-    Segment::Candidate *candidate = seg->add_candidate();
+    converter::Candidate* candidate = seg->add_candidate();
     candidate->value = "グーグル";
     candidate->content_value = "グーグル";
     CharacterFormManager::GetCharacterFormManager()->AddConversionRule(
@@ -205,14 +208,14 @@ TEST_F(VariantsRewriterTest, RewriteTestManyCandidates) {
   std::unique_ptr<VariantsRewriter> rewriter(CreateVariantsRewriter());
   Segments segments;
   const ConversionRequest request;
-  Segment *seg = segments.push_back_segment();
+  Segment* seg = segments.push_back_segment();
 
   {
     for (int i = 0; i < 10; ++i) {
-      Segment::Candidate *candidate1 = seg->add_candidate();
+      converter::Candidate* candidate1 = seg->add_candidate();
       candidate1->value = std::to_string(i);
       candidate1->content_value = std::to_string(i);
-      Segment::Candidate *candidate2 = seg->add_candidate();
+      converter::Candidate* candidate2 = seg->add_candidate();
       candidate2->content_key = "ぐーぐる";
       candidate2->key = "ぐーぐる";
       candidate2->value = "ぐーぐる";
@@ -238,12 +241,12 @@ TEST_F(VariantsRewriterTest, RewriteTestManyCandidates) {
     seg->Clear();
 
     for (int i = 0; i < 10; ++i) {
-      Segment::Candidate *candidate1 = seg->add_candidate();
+      converter::Candidate* candidate1 = seg->add_candidate();
       candidate1->content_key = "ぐーぐる";
       candidate1->key = "ぐーぐる";
       candidate1->value = "ぐーぐる";
       candidate1->content_value = "ぐーぐる";
-      Segment::Candidate *candidate2 = seg->add_candidate();
+      converter::Candidate* candidate2 = seg->add_candidate();
       candidate2->value = std::to_string(i);
       candidate2->content_value = std::to_string(i);
     }
@@ -266,7 +269,7 @@ TEST_F(VariantsRewriterTest, RewriteTestManyCandidates) {
 
 TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "HalfASCII";
     candidate.content_value = candidate.value;
     candidate.content_key = "halfascii";
@@ -275,7 +278,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kAlphabet);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "ＦｕｌｌＡＳＣＩＩ";
     candidate.content_value = candidate.value;
     candidate.content_key = "fullascii";
@@ -286,7 +289,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
               candidate.description);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "コギトエルゴスム";
     candidate.content_value = candidate.value;
     candidate.content_key = "こぎとえるごすむ";
@@ -295,7 +298,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kKatakana);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "ｺｷﾞﾄｴﾙｺﾞｽﾑ";
     candidate.content_value = candidate.value;
     candidate.content_key = "こぎとえるごすむ";
@@ -306,7 +309,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
               candidate.description);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "123";
     candidate.content_value = candidate.value;
     candidate.content_key = "123";
@@ -315,7 +318,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kNumber);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "１２３";
     candidate.content_value = candidate.value;
     candidate.content_key = "123";
@@ -327,7 +330,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
   }
   // containing symbols
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "Half ASCII";
     candidate.content_value = candidate.value;
     candidate.content_key = "half ascii";
@@ -336,7 +339,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kAlphabet);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "Half!ASCII!";
     candidate.content_value = candidate.value;
     candidate.content_key = "half!ascii!";
@@ -345,7 +348,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kAlphabet);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "CD-ROM";
     candidate.content_value = candidate.value;
     candidate.content_key = "しーでぃーろむ";
@@ -354,7 +357,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kAlphabet);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "コギト・エルゴ・スム";
     candidate.content_value = candidate.value;
     candidate.content_key = "こぎとえるごすむ";
@@ -363,7 +366,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kKatakana);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "!@#";
     candidate.content_value = candidate.value;
     candidate.content_key = "!@#";
@@ -371,7 +374,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kHalfWidth);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "「ＡＢＣ」";
     candidate.content_value = candidate.value;
     candidate.content_key = "[ABC]";
@@ -382,7 +385,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
               candidate.description);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "\\";
     candidate.content_value = candidate.value;
     candidate.content_key = "えん";
@@ -391,7 +394,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, kExpected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "＼";  // Full-width backslash
     candidate.content_value = candidate.value;
     candidate.content_key = "ばっくすらっしゅ";
@@ -400,7 +403,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, kExpected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "¥";  // Half-width yen-symbol
     candidate.content_value = candidate.value;
     candidate.content_key = "えん";
@@ -409,7 +412,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, expected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "￥";  // Full-width yen-symbol
     candidate.content_value = candidate.value;
     candidate.content_key = "えん";
@@ -418,7 +421,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, kExpected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "~";  // Tilde
     candidate.content_value = candidate.value;
     candidate.content_key = "~";
@@ -427,7 +430,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, expected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     // An emoji character of mouse face.
     candidate.value = "🐭";
     candidate.content_value = candidate.value;
@@ -438,7 +441,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, expected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     // A symbol representing "パーセント".
     candidate.value = "㌫";
     candidate.content_value = candidate.value;
@@ -449,7 +452,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
     EXPECT_EQ(candidate.description, expected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     // Minus sign.
     candidate.value = "−";
     candidate.content_value = candidate.value;
@@ -463,7 +466,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForCandidate) {
 
 TEST_F(VariantsRewriterTest, SetDescriptionForTransliteration) {
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "HalfASCII";
     candidate.content_value = candidate.value;
     candidate.content_key = "halfascii";
@@ -473,7 +476,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForTransliteration) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kAlphabet);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "!@#";
     candidate.content_value = candidate.value;
     candidate.content_key = "!@#";
@@ -483,7 +486,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForTransliteration) {
     EXPECT_EQ(candidate.description, VariantsRewriter::kHalfWidth);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "「ＡＢＣ」";
     candidate.content_value = candidate.value;
     candidate.content_key = "[ABC]";
@@ -495,7 +498,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForTransliteration) {
               candidate.description);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     // A symbol representing "パーセント".
     candidate.value = "㌫";
     candidate.content_value = candidate.value;
@@ -507,7 +510,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForTransliteration) {
     EXPECT_EQ(candidate.description, expected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     // Minus sign.
     candidate.value = "−";
     candidate.content_value = candidate.value;
@@ -522,7 +525,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForTransliteration) {
 
 TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "HalfASCII";
     candidate.content_value = candidate.value;
     candidate.content_key = "halfascii";
@@ -531,7 +534,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
   }
   // containing symbols
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "Half ASCII";
     candidate.content_value = candidate.value;
     candidate.content_key = "half ascii";
@@ -539,7 +542,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
     EXPECT_EQ(candidate.description, "");
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "Half!ASCII!";
     candidate.content_value = candidate.value;
     candidate.content_key = "half!ascii!";
@@ -547,7 +550,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
     EXPECT_EQ(candidate.description, "");
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "CD-ROM";
     candidate.content_value = candidate.value;
     candidate.content_key = "しーでぃーろむ";
@@ -555,7 +558,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
     EXPECT_EQ(candidate.description, "");
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "!@#";
     candidate.content_value = candidate.value;
     candidate.content_key = "!@#";
@@ -563,7 +566,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
     EXPECT_EQ(candidate.description, "");
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     candidate.value = "「ＡＢＣ」";
     candidate.content_value = candidate.value;
     candidate.content_key = "[ABC]";
@@ -571,7 +574,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
     EXPECT_EQ(candidate.description, "");
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     // A symbol representing "パーセント".
     candidate.value = "㌫";
     candidate.content_value = candidate.value;
@@ -581,7 +584,7 @@ TEST_F(VariantsRewriterTest, SetDescriptionForPrediction) {
     EXPECT_EQ(candidate.description, expected);
   }
   {
-    Segment::Candidate candidate;
+    converter::Candidate candidate;
     // Minus sign.
     candidate.value = "−";
     candidate.content_value = candidate.value;
@@ -655,16 +658,16 @@ TEST_F(VariantsRewriterTest, GetFormTypesFromStringPair) {
 }
 
 TEST_F(VariantsRewriterTest, RewriteForConversion) {
-  CharacterFormManager *character_form_manager =
+  CharacterFormManager* character_form_manager =
       CharacterFormManager::GetCharacterFormManager();
   std::unique_ptr<VariantsRewriter> rewriter(CreateVariantsRewriter());
   ConversionRequest request;
   {
     Segments segments;
     {
-      Segment *segment = segments.push_back_segment();
+      Segment* segment = segments.push_back_segment();
       segment->set_key("abc");
-      Segment::Candidate *candidate = segment->add_candidate();
+      converter::Candidate* candidate = segment->add_candidate();
       candidate->key = "abc";
       candidate->content_key = "abc";
       candidate->value = "abc";
@@ -684,9 +687,9 @@ TEST_F(VariantsRewriterTest, RewriteForConversion) {
     character_form_manager->SetCharacterForm("abc", Config::HALF_WIDTH);
     Segments segments;
     {
-      Segment *segment = segments.push_back_segment();
+      Segment* segment = segments.push_back_segment();
       segment->set_key("abc");
-      Segment::Candidate *candidate = segment->add_candidate();
+      converter::Candidate* candidate = segment->add_candidate();
       candidate->key = "abc";
       candidate->content_key = "abc";
       candidate->value = "abc";
@@ -705,9 +708,9 @@ TEST_F(VariantsRewriterTest, RewriteForConversion) {
   {
     Segments segments;
     {
-      Segment *segment = segments.push_back_segment();
+      Segment* segment = segments.push_back_segment();
       segment->set_key("~");
-      Segment::Candidate *candidate = segment->add_candidate();
+      converter::Candidate* candidate = segment->add_candidate();
       candidate->key = "~";
       candidate->content_key = "~";
       candidate->value = "〜";
@@ -729,7 +732,7 @@ TEST_F(VariantsRewriterTest, RewriteForConversion) {
 }
 
 TEST_F(VariantsRewriterTest, RewriteForPrediction) {
-  CharacterFormManager *character_form_manager =
+  CharacterFormManager* character_form_manager =
       CharacterFormManager::GetCharacterFormManager();
   std::unique_ptr<VariantsRewriter> rewriter(CreateVariantsRewriter());
   const ConversionRequest request =
@@ -766,7 +769,7 @@ TEST_F(VariantsRewriterTest, RewriteForPrediction) {
 }
 
 TEST_F(VariantsRewriterTest, RewriteForMixedConversion) {
-  CharacterFormManager *character_form_manager =
+  CharacterFormManager* character_form_manager =
       CharacterFormManager::GetCharacterFormManager();
   std::unique_ptr<VariantsRewriter> rewriter(CreateVariantsRewriter());
   Request request;
@@ -806,18 +809,16 @@ TEST_F(VariantsRewriterTest, RewriteForMixedConversion) {
 
     Segments segments;
 
-    Segment *segment = segments.push_back_segment();
+    Segment* segment = segments.push_back_segment();
     segment->set_key("さんえん");
 
-    Segment::Candidate *candidate = segment->add_candidate();
+    converter::Candidate* candidate = segment->add_candidate();
     candidate->key = "さんえん";
     candidate->content_key = candidate->key;
     candidate->value = "３円";  // Full-width three.
     candidate->content_value = candidate->value;
-    candidate->inner_segment_boundary = {
-        Segment::Candidate::EncodeLengths(6, 3, 6, 3),
-        Segment::Candidate::EncodeLengths(6, 3, 6, 3),
-    };
+    candidate->inner_segment_boundary = converter::BuildInnerSegmentBoundary(
+        {{6, 3, 6, 3}, {6, 3, 6, 3}}, candidate->key, candidate->value);
 
     EXPECT_TRUE(rewriter->Rewrite(conv_request, &segments));
 
@@ -826,28 +827,26 @@ TEST_F(VariantsRewriterTest, RewriteForMixedConversion) {
 
     // Since the character form preference is set to Config::HALF_WIDTH, the
     // half-width variant comes first.
-    const Segment::Candidate &half = segments.segment(0).candidate(0);
+    const converter::Candidate& half = segments.segment(0).candidate(0);
     EXPECT_EQ(half.key, "さんえん");
     EXPECT_EQ(half.value, "3円");
     ASSERT_EQ(half.inner_segment_boundary.size(), 2);
-    EXPECT_EQ(half.inner_segment_boundary[0],
-              Segment::Candidate::EncodeLengths(6, 1, 6, 1));
-    EXPECT_EQ(half.inner_segment_boundary[1],
-              Segment::Candidate::EncodeLengths(6, 3, 6, 3));
+    EXPECT_EQ(half.inner_segment_boundary,
+              converter::BuildInnerSegmentBoundary({{6, 1, 6, 1}, {6, 3, 6, 3}},
+                                                   half.key, half.value));
 
-    const Segment::Candidate &full = segments.segment(0).candidate(1);
+    const converter::Candidate& full = segments.segment(0).candidate(1);
     EXPECT_EQ(full.key, "さんえん");
     EXPECT_EQ(full.value, "３円");
     ASSERT_EQ(full.inner_segment_boundary.size(), 2);
-    EXPECT_EQ(full.inner_segment_boundary[0],
-              Segment::Candidate::EncodeLengths(6, 3, 6, 3));
-    EXPECT_EQ(full.inner_segment_boundary[1],
-              Segment::Candidate::EncodeLengths(6, 3, 6, 3));
+    EXPECT_EQ(full.inner_segment_boundary,
+              converter::BuildInnerSegmentBoundary({{6, 3, 6, 3}, {6, 3, 6, 3}},
+                                                   full.key, full.value));
   }
 }
 
 TEST_F(VariantsRewriterTest, RewriteForPartialSuggestion) {
-  CharacterFormManager *character_form_manager =
+  CharacterFormManager* character_form_manager =
       CharacterFormManager::GetCharacterFormManager();
   EXPECT_EQ(Config::FULL_WIDTH,
             character_form_manager->GetConversionCharacterForm("0"));
@@ -862,17 +861,17 @@ TEST_F(VariantsRewriterTest, RewriteForPartialSuggestion) {
   {
     Segments segments;
 
-    Segment *segment = segments.push_back_segment();
+    Segment* segment = segments.push_back_segment();
     segment->set_key("3えん");
 
-    Segment::Candidate *candidate = segment->add_candidate();
+    converter::Candidate* candidate = segment->add_candidate();
     candidate->key = "3";
     candidate->content_key = candidate->key;
     candidate->value = "３";  // Full-width three.
     candidate->content_value = candidate->value;
     candidate->consumed_key_size = 1;
-    candidate->attributes |= Segment::Candidate::PARTIALLY_KEY_CONSUMED;
-    candidate->attributes |= Segment::Candidate::AUTO_PARTIAL_SUGGESTION;
+    candidate->attributes |= converter::Attribute::PARTIALLY_KEY_CONSUMED;
+    candidate->attributes |= converter::Attribute::AUTO_PARTIAL_SUGGESTION;
 
     EXPECT_TRUE(rewriter->Rewrite(conv_request, &segments));
 
@@ -880,17 +879,18 @@ TEST_F(VariantsRewriterTest, RewriteForPartialSuggestion) {
     EXPECT_EQ(segments.segment(0).candidates_size(), 2);
 
     for (size_t i = 0; i < segments.segment(0).candidates_size(); ++i) {
-      const Segment::Candidate &cand = segments.segment(0).candidate(i);
+      const converter::Candidate& cand = segments.segment(0).candidate(i);
       EXPECT_EQ(cand.consumed_key_size, 1);
-      EXPECT_TRUE(cand.attributes & Segment::Candidate::PARTIALLY_KEY_CONSUMED);
       EXPECT_TRUE(cand.attributes &
-                  Segment::Candidate::AUTO_PARTIAL_SUGGESTION);
+                  converter::Attribute::PARTIALLY_KEY_CONSUMED);
+      EXPECT_TRUE(cand.attributes &
+                  converter::Attribute::AUTO_PARTIAL_SUGGESTION);
     }
   }
 }
 
 TEST_F(VariantsRewriterTest, RewriteForSuggestion) {
-  CharacterFormManager *character_form_manager =
+  CharacterFormManager* character_form_manager =
       CharacterFormManager::GetCharacterFormManager();
   std::unique_ptr<VariantsRewriter> rewriter(CreateVariantsRewriter());
   const ConversionRequest request =
@@ -924,8 +924,8 @@ TEST_F(VariantsRewriterTest, RewriteForSuggestion) {
   }
   {
     Segments segments;
-    Segment *segment = segments.push_back_segment();
-    Segment::Candidate *candidate = segment->add_candidate();
+    Segment* segment = segments.push_back_segment();
+    converter::Candidate* candidate = segment->add_candidate();
     candidate->value = "1,000";
     candidate->content_value = "1,000";
     candidate->style =
@@ -933,7 +933,7 @@ TEST_F(VariantsRewriterTest, RewriteForSuggestion) {
     EXPECT_TRUE(rewriter->Rewrite(request, &segments));
     ASSERT_EQ(segments.segments_size(), 1);
     ASSERT_EQ(segments.segment(0).candidates_size(), 1);
-    const Segment::Candidate &rewritten_candidate =
+    const converter::Candidate& rewritten_candidate =
         segments.segment(0).candidate(0);
     EXPECT_EQ(rewritten_candidate.value, "１，０００");
     EXPECT_EQ(rewritten_candidate.style,
@@ -943,39 +943,40 @@ TEST_F(VariantsRewriterTest, RewriteForSuggestion) {
     // Test for candidate with inner segment boundary.
     Segments segments;
 
-    Segment *segment = segments.push_back_segment();
+    Segment* segment = segments.push_back_segment();
     segment->set_key("まじ!");
 
-    Segment::Candidate *candidate = segment->add_candidate();
+    converter::Candidate* candidate = segment->add_candidate();
     candidate->key = "まじ!";
     candidate->content_key = candidate->key;
     candidate->value = "マジ!";
     candidate->content_value = candidate->value;
-    candidate->inner_segment_boundary.push_back(
-        Segment::Candidate::EncodeLengths(6, 6, 6, 6));  // 6 bytes for "まじ"
-    candidate->inner_segment_boundary.push_back(
-        Segment::Candidate::EncodeLengths(1, 1, 1, 1));  // 1 byte for "!"
+    candidate->inner_segment_boundary = converter::BuildInnerSegmentBoundary(
+        {
+            {6, 6, 6, 6},  // 6 bytes for "まじ"
+            {1, 1, 1, 1}   // 1 byte for "!"
+        },
+        candidate->key, candidate->value);
 
     EXPECT_TRUE(rewriter->Rewrite(request, &segments));
     ASSERT_EQ(segments.segments_size(), 1);
     ASSERT_EQ(segments.segment(0).candidates_size(), 1);
 
-    const Segment::Candidate &rewritten_candidate =
+    const converter::Candidate& rewritten_candidate =
         segments.segment(0).candidate(0);
     EXPECT_EQ(rewritten_candidate.value, "マジ！");  // "マジ！" (full-width)
     EXPECT_EQ(rewritten_candidate.content_value,
               "マジ！");  // "マジ！" (full-width)
-    ASSERT_EQ(rewritten_candidate.inner_segment_boundary.size(), 2);
-
-    // Boundary information for
-    // key="まじ", value="マジ", ckey="まじ", cvalue="マジ"
-    EXPECT_EQ(rewritten_candidate.inner_segment_boundary[0],
-              Segment::Candidate::EncodeLengths(6, 6, 6, 6));
-    // Boundary information for
-    // key="!", value="！", ckey="!", cvalue="！".
-    // Values are converted to full-width.
-    EXPECT_EQ(rewritten_candidate.inner_segment_boundary[1],
-              Segment::Candidate::EncodeLengths(1, 3, 1, 3));
+    EXPECT_EQ(rewritten_candidate.inner_segment_boundary,
+              converter::BuildInnerSegmentBoundary(
+                  {
+                      // key="まじ", value="マジ", ckey="まじ", cvalue="マジ"
+                      {6, 6, 6, 6},
+                      // key="!", value="！", ckey="!", cvalue="！".
+                      // Values are converted to full-width.
+                      {1, 3, 1, 3}  // 1 byte for "!"
+                  },
+                  rewritten_candidate.key, rewritten_candidate.value));
   }
 }
 
@@ -987,7 +988,7 @@ TEST_F(VariantsRewriterTest, Capability) {
 
 TEST_F(VariantsRewriterTest, LearningLevel) {
   std::unique_ptr<VariantsRewriter> rewriter(CreateVariantsRewriter());
-  CharacterFormManager *manager =
+  CharacterFormManager* manager =
       CharacterFormManager::GetCharacterFormManager();
   config::Config config;
   config.set_history_learning_level(Config::NO_HISTORY);
@@ -996,11 +997,11 @@ TEST_F(VariantsRewriterTest, LearningLevel) {
 
   Segments segments;
 
-  Segment *segment = segments.push_back_segment();
+  Segment* segment = segments.push_back_segment();
   segment->set_key("いちにさん");
   segment->set_segment_type(Segment::FIXED_VALUE);
 
-  Segment::Candidate *cand = segment->add_candidate();
+  converter::Candidate* cand = segment->add_candidate();
   cand->key = "いちにさん";
   cand->content_key = cand->key;
 
@@ -1015,16 +1016,16 @@ TEST_F(VariantsRewriterTest, LearningLevel) {
 
 TEST_F(VariantsRewriterTest, Finish) {
   std::unique_ptr<VariantsRewriter> rewriter(CreateVariantsRewriter());
-  auto *manager = CharacterFormManager::GetCharacterFormManager();
+  auto* manager = CharacterFormManager::GetCharacterFormManager();
   const ConversionRequest request;
 
   Segments segments;
 
-  Segment *segment = segments.push_back_segment();
+  Segment* segment = segments.push_back_segment();
   segment->set_key("いちにさん");
   segment->set_segment_type(Segment::FIXED_VALUE);
 
-  Segment::Candidate *cand = segment->add_candidate();
+  converter::Candidate* cand = segment->add_candidate();
   cand->key = "いちにさん";
   cand->content_key = cand->key;
 

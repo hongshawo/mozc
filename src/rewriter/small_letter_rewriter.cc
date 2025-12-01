@@ -42,6 +42,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "base/util.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
 #include "converter/segments.h"
 #include "protocol/commands.pb.h"
 #include "request/conversion_request.h"
@@ -53,7 +55,7 @@ namespace {
 // mapping can be extended for other letters like '+' or 'a', implementation
 // based on array will not work in the future. In order to avoid that,
 // std::map is chosen.
-const auto *kSuperscriptTable =
+const auto* kSuperscriptTable =
     new absl::flat_hash_map<char, absl::string_view>({
         {'0', "⁰"},
         {'1', "¹"},
@@ -72,7 +74,7 @@ const auto *kSuperscriptTable =
         {')', "⁾"},
     });
 
-const auto *kSubscriptTable = new absl::flat_hash_map<char, absl::string_view>({
+const auto* kSubscriptTable = new absl::flat_hash_map<char, absl::string_view>({
     {'0', "₀"},
     {'1', "₁"},
     {'2', "₂"},
@@ -110,7 +112,7 @@ enum ParserState : char {
 // This function allows conversion of digits sequence. For example, _123 will be
 // converted into ₁₂₃. Other symbols requires prefix as `^+` or `_(` for each
 // occurrence. `^()` does not mean ⁽⁾ but means ⁽).
-bool ConvertExpressions(const absl::string_view input, std::string *value) {
+bool ConvertExpressions(const absl::string_view input, std::string* value) {
   // Check preconditions
   if (input.empty()) {
     return false;
@@ -197,14 +199,14 @@ bool ConvertExpressions(const absl::string_view input, std::string *value) {
 }
 
 void AddCandidate(std::string key, std::string description, std::string value,
-                  int index, Segment *segment) {
+                  int index, Segment* segment) {
   DCHECK(segment);
 
   if (index < 0 || index > segment->candidates_size()) {
     index = segment->candidates_size();
   }
 
-  Segment::Candidate *candidate = segment->insert_candidate(index);
+  converter::Candidate* candidate = segment->insert_candidate(index);
   DCHECK(candidate);
 
   segment->set_key(key);
@@ -212,8 +214,8 @@ void AddCandidate(std::string key, std::string description, std::string value,
   candidate->value = value;
   candidate->content_value = std::move(value);
   candidate->description = std::move(description);
-  candidate->attributes |= (Segment::Candidate::NO_LEARNING |
-                            Segment::Candidate::NO_VARIANTS_EXPANSION);
+  candidate->attributes |= (converter::Attribute::NO_LEARNING |
+                            converter::Attribute::NO_VARIANTS_EXPANSION);
 }
 
 std::optional<std::string> GetValue(absl::string_view key) {
@@ -229,7 +231,7 @@ std::optional<std::string> GetValue(absl::string_view key) {
 }
 }  // namespace
 
-int SmallLetterRewriter::capability(const ConversionRequest &request) const {
+int SmallLetterRewriter::capability(const ConversionRequest& request) const {
   if (request.request().mixed_conversion()) {
     return RewriterInterface::ALL;
   }
@@ -238,7 +240,7 @@ int SmallLetterRewriter::capability(const ConversionRequest &request) const {
 
 std::optional<RewriterInterface::ResizeSegmentsRequest>
 SmallLetterRewriter::CheckResizeSegmentsRequest(
-    const ConversionRequest &request, const Segments &segments) const {
+    const ConversionRequest& request, const Segments& segments) const {
   if (segments.resized() || segments.conversion_segments_size() <= 1) {
     return std::nullopt;
   }
@@ -262,8 +264,8 @@ SmallLetterRewriter::CheckResizeSegmentsRequest(
   return resize_request;
 }
 
-bool SmallLetterRewriter::Rewrite(const ConversionRequest &request,
-                                  Segments *segments) const {
+bool SmallLetterRewriter::Rewrite(const ConversionRequest& request,
+                                  Segments* segments) const {
   if (segments->conversion_segments_size() != 1) {
     return false;
   }
@@ -274,7 +276,7 @@ bool SmallLetterRewriter::Rewrite(const ConversionRequest &request,
     return false;
   }
 
-  Segment *segment = segments->mutable_conversion_segment(0);
+  Segment* segment = segments->mutable_conversion_segment(0);
 
   // Candidates from this function should not be on high position. -1 will
   // overwritten with the last index of candidates.

@@ -39,6 +39,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "base/container/serialized_string_array.h"
+#include "converter/attribute.h"
 #include "converter/candidate.h"
 #include "converter/segments.h"
 #include "data_manager/data_manager.h"
@@ -47,21 +48,29 @@
 
 namespace mozc {
 
+using ::mozc::converter::Attribute;
 using ::mozc::converter::Candidate;
 
-void CorrectionRewriter::SetCandidate(const ReadingCorrectionItem &item,
-                                      Candidate *candidate) {
+void CorrectionRewriter::SetCandidate(const ReadingCorrectionItem& item,
+                                      Candidate* candidate) {
+  // TODO(taku): The current description does not accurately represent the
+  // information about the typos and is space-consuming. We will
+  // change the description or replace it more direct inlined annotation.
+  constexpr absl::string_view kDidYouMean = "もしかして";
+
   candidate->prefix = "→ ";
-  candidate->attributes |= Candidate::SPELLING_CORRECTION;
-
-  candidate->description = absl::StrCat("<もしかして: ", item.correction, ">");
-
-  DCHECK(candidate->IsValid());
+  candidate->attributes |= Attribute::SPELLING_CORRECTION;
+  if (item.correction.empty()) {
+    candidate->description = absl::StrCat("<", kDidYouMean, ">");
+  } else {
+    candidate->description =
+        absl::StrCat("<", kDidYouMean, ": ", item.correction, ">");
+  }
 }
 
 bool CorrectionRewriter::LookupCorrection(
     const absl::string_view key, const absl::string_view value,
-    std::vector<ReadingCorrectionItem> *results) const {
+    std::vector<ReadingCorrectionItem>* results) const {
   CHECK(results);
   results->clear();
 
@@ -93,16 +102,16 @@ CorrectionRewriter::CorrectionRewriter(
 
 // static
 std::unique_ptr<CorrectionRewriter>
-CorrectionRewriter::CreateCorrectionRewriter(const DataManager &data_manager) {
+CorrectionRewriter::CreateCorrectionRewriter(const DataManager& data_manager) {
   absl::string_view value_array_data, error_array_data, correction_array_data;
   data_manager.GetReadingCorrectionData(&value_array_data, &error_array_data,
-                                         &correction_array_data);
+                                        &correction_array_data);
   return std::make_unique<CorrectionRewriter>(
       value_array_data, error_array_data, correction_array_data);
 }
 
-bool CorrectionRewriter::Rewrite(const ConversionRequest &request,
-                                 Segments *segments) const {
+bool CorrectionRewriter::Rewrite(const ConversionRequest& request,
+                                 Segments* segments) const {
   if (!request.config().use_spelling_correction()) {
     return false;
   }
@@ -110,7 +119,7 @@ bool CorrectionRewriter::Rewrite(const ConversionRequest &request,
   bool modified = false;
   std::vector<ReadingCorrectionItem> results;
 
-  for (Segment &segment : segments->conversion_segments()) {
+  for (Segment& segment : segments->conversion_segments()) {
     if (segment.candidates_size() == 0) {
       continue;
     }
@@ -118,14 +127,25 @@ bool CorrectionRewriter::Rewrite(const ConversionRequest &request,
     for (size_t j = 0; j < segment.candidates_size(); ++j) {
       // Check if the existing candidate is a corrected candidate.
       // In this case, update the candidate description.
-      const Segment::Candidate &candidate = segment.candidate(j);
+      const converter::Candidate& candidate = segment.candidate(j);
+
+      // Handles the spelling correction defined in the system dictionary.
+      // mostly they are Katakana to Katakana correction.
+      if (candidate.attributes & Attribute::SPELLING_CORRECTION) {
+        // Sets empty correction item.
+        SetCandidate(ReadingCorrectionItem{"", "", ""},
+                     segment.mutable_candidate(j));
+        continue;
+      }
+
       if (!LookupCorrection(candidate.content_key, candidate.content_value,
                             &results)) {
         continue;
       }
+
       CHECK_GT(results.size(), 0);
       // results.size() should be 1, but we don't check it here.
-      Candidate *mutable_candidate = segment.mutable_candidate(j);
+      Candidate* mutable_candidate = segment.mutable_candidate(j);
       DCHECK(mutable_candidate);
       SetCandidate(results[0], mutable_candidate);
       modified = true;
@@ -143,7 +163,7 @@ bool CorrectionRewriter::Rewrite(const ConversionRequest &request,
     // the system dictionary.
     const size_t kInsertPosition =
         std::min<size_t>(3, segment.candidates_size());
-    const Candidate &top_candidate = segment.candidate(0);
+    const Candidate& top_candidate = segment.candidate(0);
     if (!LookupCorrection(top_candidate.content_key, "", &results)) {
       continue;
     }

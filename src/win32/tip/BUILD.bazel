@@ -34,12 +34,25 @@ load(
     "MOZC_TAGS",
     "mozc_cc_library",
     "mozc_cc_test",
+    "mozc_py_binary",
     "mozc_win32_cc_prod_binary",
     "mozc_win32_resource_from_template",
 )
+load("//:config.bzl", "BRANDING")
 load(
     "//bazel/win32:build_defs.bzl",
     "features_gdi",
+)
+
+mozc_py_binary(
+    name = "build_tip_forwarder_dll",
+    srcs = ["build_tip_forwarder_dll.py"],
+    test_lib = False,
+    visibility = ["//visibility:private"],
+    deps = [
+        "//build_tools:mozc_version_lib",
+        "//build_tools:vs_util",
+    ],
 )
 
 mozc_cc_library(
@@ -99,6 +112,44 @@ mozc_win32_cc_prod_binary(
     deps = [
         ":mozc_tip_deps",
     ],
+)
+
+mozc_win32_cc_prod_binary(
+    name = "mozc_tip64arm",
+    srcs = ["mozc_tip_main.cc"],
+    executable_name_map = {
+        "Mozc": "mozc_tip64arm.dll",
+        "GoogleJapaneseInput": "GoogleIMEJaTIP64Arm.dll",
+    },
+    linkshared = True,
+    platform = "//:windows-arm64",
+    static_crt = True,
+    tags = MOZC_TAGS.WIN_ONLY,
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//win32/installer:__subpackages__"],  # Scheuklappen: keep
+    win_def_file = "mozc_tip.def",
+    deps = [
+        ":mozc_tip_deps",
+    ],
+)
+
+genrule(
+    name = "mozc_tip64x",
+    srcs = [
+        "//base:mozc_version_txt",
+    ],
+    outs = ["mozc_tip64x.dll" if BRANDING == "Mozc" else "GoogleIMEJaTIP64X.msi"],
+    cmd = " ".join([
+        "$(location :build_tip_forwarder_dll)",
+        "--output=$@",
+        "--version_file=$(location //base:mozc_version_txt)",
+        "--branding=" + BRANDING,
+    ]),
+    target_compatible_with = ["@platforms//os:windows"],
+    tools = [
+        ":build_tip_forwarder_dll",
+    ],
+    visibility = ["//win32/installer:__subpackages__"],  # Scheuklappen: keep
 )
 
 mozc_win32_resource_from_template(
@@ -168,8 +219,6 @@ mozc_cc_library(
         ":tip_thread_context",
         ":tip_ui_handler",
         "//base:const",
-        "//base:file_util",
-        "//base:log_file",
         "//base:process",
         "//base:system_util",
         "//base:update_util",
@@ -212,9 +261,64 @@ mozc_cc_library(
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
         ":tip_compartment_util",
-        "//base:absl_nullability",
         "//base/win32:com",
         "//base/win32:hresultor",
+        "@com_google_absl//absl/base:nullability",
+        "@com_microsoft_wil//:wil",
+    ],
+)
+
+mozc_cc_library(
+    name = "tip_candidate_string",
+    srcs = ["tip_candidate_string.cc"],
+    hdrs = ["tip_candidate_string.h"],
+    tags = MOZC_TAGS.WIN_ONLY,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":tip_dll_module",
+        "//base/win32:com",
+        "@com_google_absl//absl/base:nullability",
+    ],
+)
+
+mozc_cc_test(
+    name = "tip_candidate_string_test",
+    size = "small",
+    srcs = ["tip_candidate_string_test.cc"],
+    tags = MOZC_TAGS.WIN_ONLY,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":gmock_matchers",
+        ":tip_candidate_string",
+        "//testing:gunit_main",
+        "@com_microsoft_wil//:wil",
+    ],
+)
+
+mozc_cc_library(
+    name = "tip_enum_candidates",
+    srcs = ["tip_enum_candidates.cc"],
+    hdrs = ["tip_enum_candidates.h"],
+    tags = MOZC_TAGS.WIN_ONLY,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":tip_candidate_string",
+        ":tip_dll_module",
+        "//base/win32:com",
+        "@com_google_absl//absl/base:nullability",
+    ],
+)
+
+mozc_cc_test(
+    name = "tip_enum_candidates_test",
+    size = "small",
+    srcs = ["tip_enum_candidates_test.cc"],
+    tags = MOZC_TAGS.WIN_ONLY,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":gmock_matchers",
+        ":tip_enum_candidates",
+        "//testing:gunit_main",
         "@com_microsoft_wil//:wil",
     ],
 )
@@ -226,8 +330,12 @@ mozc_cc_library(
     tags = MOZC_TAGS.WIN_ONLY,
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
+        ":tip_candidate_string",
         ":tip_dll_module",
+        ":tip_enum_candidates",
         "//base/win32:com",
+        "@com_google_absl//absl/base:nullability",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_microsoft_wil//:wil",
     ],
 )
@@ -358,6 +466,7 @@ mozc_cc_library(
         ":tip_query_provider",
         "//base/win32:com",
         "//base/win32:com_implements",
+        "@com_google_absl//absl/base:nullability",
         "@com_microsoft_wil//:wil",
     ],
 )
@@ -423,6 +532,9 @@ mozc_cc_library(
     deps = [
         ":tip_display_attributes",
         ":tip_dll_module",
+        "//base/win32:com",
+        "@com_google_absl//absl/base:nullability",
+        "@com_microsoft_wil//:wil",
     ],
 )
 
@@ -514,6 +626,7 @@ mozc_cc_library(
         ":tip_text_service",
         "//base/win32:com",
         "//base/win32:com_implements",
+        "@com_google_absl//absl/base:nullability",
         "@com_microsoft_wil//:wil",
     ],
 )
@@ -589,6 +702,7 @@ mozc_cc_library(
         ":tip_text_service",
         "//base/win32:com",
         "//base/win32:com_implements",
+        "@com_google_absl//absl/base:nullability",
         "@com_microsoft_wil//:wil",
     ],
 )
@@ -639,6 +753,8 @@ mozc_cc_library(
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
         ":tip_dll_module",
+        "//base/win32:com",
+        "@com_google_absl//absl/base:nullability",
     ],
 )
 
@@ -704,9 +820,11 @@ mozc_cc_test(
     tags = MOZC_TAGS.WIN_ONLY,
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
+        ":gmock_matchers",
         ":tip_candidate_list",
-        ":tip_dll_module",
+        "//base/win32:com",
         "//testing:gunit_main",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/strings",
         "@com_microsoft_wil//:wil",
     ],
@@ -747,5 +865,19 @@ mozc_cc_test(
     deps = [
         ":tip_input_mode_manager",
         "//testing:gunit_main",
+    ],
+)
+
+mozc_cc_library(
+    name = "gmock_matchers",
+    testonly = True,
+    hdrs = ["gmock_matchers.h"],
+    tags = MOZC_TAGS.WIN_ONLY,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        "//base/win32:hresult",
+        "//base/win32:wide_char",
+        "//testing:gunit",
+        "@com_microsoft_wil//:wil",
     ],
 )

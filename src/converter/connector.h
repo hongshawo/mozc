@@ -33,11 +33,13 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "data_manager/data_manager.h"
 #include "storage/louds/simple_succinct_bit_vector_index.h"
 
@@ -48,27 +50,23 @@ class Connector final {
   static constexpr int16_t kInvalidCost = 30000;
 
   static absl::StatusOr<Connector> CreateFromDataManager(
-      const DataManager &data_manager);
+      const DataManager& data_manager);
 
-  static absl::StatusOr<Connector> Create(absl::string_view connection_data,
-                                          int cache_size);
+  static absl::StatusOr<Connector> Create(absl::string_view connection_data);
 
   int GetTransitionCost(uint16_t rid, uint16_t lid) const;
   int GetResolution() const { return resolution_; }
 
-  void ClearCache();
-
  private:
   class Row;
 
-  absl::Status Init(absl::string_view connection_data, int cache_size);
+  absl::Status Init(absl::string_view connection_data);
 
   int LookupCost(uint16_t rid, uint16_t lid) const;
 
   std::vector<Row> rows_;
-  const uint16_t *default_cost_ = nullptr;
+  const uint16_t* default_cost_ = nullptr;
   int resolution_ = 0;
-  uint32_t cache_hash_mask_ = 0;
   // Cache for transition cost.
   using cache_t = std::vector<std::atomic<uint64_t>>;
   mutable std::unique_ptr<cache_t> cache_;
@@ -80,16 +78,16 @@ class Connector::Row final {
       : chunk_bits_index_(sizeof(uint32_t)),
         compact_bits_index_(sizeof(uint32_t)) {}
 
-  void Init(const uint8_t *chunk_bits, size_t chunk_bits_size,
-            const uint8_t *compact_bits, size_t compact_bits_size,
-            const uint8_t *values, bool use_1byte_value);
+  void Init(const uint8_t* chunk_bits, size_t chunk_bits_size,
+            const uint8_t* compact_bits, size_t compact_bits_size,
+            const uint8_t* values, bool use_1byte_value);
   // Returns the value in the row if found.
   std::optional<uint16_t> GetValue(uint16_t index) const;
 
  private:
   storage::louds::SimpleSuccinctBitVectorIndex chunk_bits_index_;
   storage::louds::SimpleSuccinctBitVectorIndex compact_bits_index_;
-  const uint8_t *values_ = nullptr;
+  const uint8_t* values_ = nullptr;
   bool use_1byte_value_ = false;
 };
 

@@ -209,29 +209,12 @@ mozc_cc_test(
     ],
 )
 
-mozc_py_binary(
-    name = "gen_character_set",
-    srcs = ["gen_character_set.py"],
-)
-
-mozc_run_build_tool(
-    name = "character_set_data",
-    srcs = {
-        "--jisx0201file": ["//data/unicode:JIS0201.TXT"],
-        "--jisx0208file": ["//data/unicode:JIS0208.TXT"],
-    },
-    outs = {
-        "--output": "character_set.inc",
-    },
-    tool = ":gen_character_set",
-    visibility = ["//visibility:private"],
-)
-
 mozc_cc_library(
     name = "hash",
     srcs = ["hash.cc"],
     hdrs = ["hash.h"],
     deps = [
+        "@com_google_absl//absl/hash:city",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
     ],
@@ -284,7 +267,6 @@ mozc_cc_library(
     name = "util",
     srcs = [
         "util.cc",
-        ":character_set_data",
     ],
     hdrs = ["util.h"],
     visibility = [
@@ -316,7 +298,6 @@ mozc_cc_test(
     deps = [
         ":util",
         "//testing:gunit_main",
-        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -641,6 +622,7 @@ mozc_cc_library(
         ":system_util",
         ":util",
         ":vlog",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
@@ -715,11 +697,9 @@ mozc_run_build_tool(
 
 mozc_cc_library(
     name = "config_file_stream",
-    srcs = [
-        "config_file_stream.cc",
-        ":config_file_stream_data",
-    ],
+    srcs = ["config_file_stream.cc"],
     hdrs = ["config_file_stream.h"],
+    textual_hdrs = [":config_file_stream_data"],
     visibility = ["//:__subpackages__"],
     deps = [
         ":file_stream",
@@ -761,7 +741,7 @@ mozc_run_build_tool(
     outs = {
         "--output": "mozc_version.txt",
     },
-    args = mozc_select(
+    args = ["--use_mozc_version_env"] + mozc_select(
         android = ["--target_platform=Android"],
         chromiumos = ["--target_platform=ChromeOS"],
         default = ["--target_platform="],
@@ -1018,22 +998,6 @@ mozc_cc_library(
 )
 
 mozc_cc_library(
-    name = "crash_report_handler",
-    srcs = ["crash_report_handler.cc"],
-    hdrs = ["crash_report_handler.h"],
-    deps = [
-        ":const",
-        ":file_util",
-        ":system_util",
-        ":version",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-    ] + mozc_select(
-        windows = ["//base/win32:wide_char"],
-    ),
-)
-
-mozc_cc_library(
     name = "embedded_file",
     hdrs = ["embedded_file.h"],
     visibility = ["//:__subpackages__"],
@@ -1141,11 +1105,4 @@ mozc_cc_test(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/strings:string_view",
     ],
-)
-
-# TODO(b/397718233): Remove this library once Abseil LTS supports absl_nullable.
-mozc_cc_library(
-    name = "absl_nullability",
-    hdrs = ["absl_nullability.h"],
-    deps = ["@com_google_absl//absl/base:nullability"],
 )

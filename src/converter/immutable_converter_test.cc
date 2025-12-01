@@ -30,7 +30,6 @@
 #include "converter/immutable_converter.h"
 
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -40,6 +39,9 @@
 #include "absl/log/check.h"
 #include "absl/strings/string_view.h"
 #include "base/util.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
+#include "converter/inner_segment.h"
 #include "converter/lattice.h"
 #include "converter/node.h"
 #include "converter/segments.h"
@@ -58,7 +60,7 @@ namespace mozc {
 
 class ImmutableConverterTestPeer : testing::TestPeer<ImmutableConverter> {
  public:
-  explicit ImmutableConverterTestPeer(ImmutableConverter &converter)
+  explicit ImmutableConverterTestPeer(ImmutableConverter& converter)
       : testing::TestPeer<ImmutableConverter>(converter) {}
 
   // Make them public via peer class.
@@ -69,24 +71,27 @@ class ImmutableConverterTestPeer : testing::TestPeer<ImmutableConverter> {
 
 namespace {
 
+using converter::Attribute;
+using converter::Candidate;
 using dictionary::DictionaryInterface;
 using ::testing::StrEq;
 
-void SetCandidate(absl::string_view key, absl::string_view value,
-                  Segment *segment) {
+void SetCandidate(std::string key, std::string value, Segment* segment) {
   segment->set_key(key);
-  Segment::Candidate *candidate = segment->add_candidate();
-#ifdef ABSL_USES_STD_STRING_VIEW
+  Candidate* candidate = segment->add_candidate();
   candidate->key = key;
   candidate->value = value;
-  candidate->content_key = key;
-  candidate->content_value = value;
-#else   // ABSL_USES_STD_STRING_VIEW
-  candidate->key = std::string(key);
-  candidate->value = std::string(value);
-  candidate->content_key = std::string(key);
-  candidate->content_value = std::string(value);
-#endif  // ABSL_USES_STD_STRING_VIEW
+  candidate->content_key = std::move(key);
+  candidate->content_value = std::move(value);
+}
+
+int GetCandidateIndexByValue(absl::string_view value, const Segment& segment) {
+  for (size_t i = 0; i < segment.candidates_size(); ++i) {
+    if (segment.candidate(i).value == value) {
+      return i;
+    }
+  }
+  return -1;  // not found
 }
 
 class MockDataAndImmutableConverter {
@@ -115,7 +120,7 @@ class MockDataAndImmutableConverter {
     CHECK(immutable_converter_);
   }
 
-  ImmutableConverter *GetConverter() { return immutable_converter_.get(); }
+  ImmutableConverter* GetConverter() { return immutable_converter_.get(); }
   ImmutableConverterTestPeer GetConverterTestPeer() {
     return ImmutableConverterTestPeer(*immutable_converter_);
   }
@@ -128,27 +133,26 @@ class MockDataAndImmutableConverter {
 }  // namespace
 
 TEST(ImmutableConverterTest, KeepKeyForPrediction) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   Segments segments;
   const ConversionRequest request =
       ConversionRequestBuilder()
           .SetOptions({.request_type = ConversionRequest::PREDICTION,
                        .max_conversion_candidates_size = 10})
           .Build();
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   const std::string kRequestKey = "よろしくおねがいしま";
   segment->set_key(kRequestKey);
-  EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(request,
-                                                                    &segments));
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(request, &segments));
   EXPECT_EQ(segments.segments_size(), 1);
   EXPECT_GT(segments.segment(0).candidates_size(), 0);
   EXPECT_EQ(segments.segment(0).key(), kRequestKey);
 }
 
 TEST(ImmutableConverterTest, ResegmentTest) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   Segments segments;
   const ConversionRequest request =
       ConversionRequestBuilder()
@@ -158,11 +162,11 @@ TEST(ImmutableConverterTest, ResegmentTest) {
 
   {
     segments.Clear();
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     const std::string kRequestKey = "1ねんせい";
     segment->set_key(kRequestKey);
-    EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-        request, &segments));
+    EXPECT_TRUE(
+        data_and_converter->GetConverter()->Convert(request, &segments));
     EXPECT_EQ(segments.segments_size(), 2);
     EXPECT_EQ(segments.segment(0).candidate(0).value, "1");
     EXPECT_EQ(segments.segment(1).candidate(0).value, "年生");
@@ -170,11 +174,11 @@ TEST(ImmutableConverterTest, ResegmentTest) {
 
   {
     segments.Clear();
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     const std::string kRequestKey = "ちゅう2";
     segment->set_key(kRequestKey);
-    EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-        request, &segments));
+    EXPECT_TRUE(
+        data_and_converter->GetConverter()->Convert(request, &segments));
     EXPECT_EQ(segments.segments_size(), 2);
     EXPECT_EQ(segments.segment(0).candidate(0).value, "中");
     EXPECT_EQ(segments.segment(1).candidate(0).value, "2");
@@ -182,8 +186,8 @@ TEST(ImmutableConverterTest, ResegmentTest) {
 }
 
 TEST(ImmutableConverterTest, DummyCandidatesCost) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   Segment segment;
   SetCandidate("てすと", "test", &segment);
   data_and_converter->GetConverterTestPeer().InsertDummyCandidates(&segment,
@@ -194,21 +198,20 @@ TEST(ImmutableConverterTest, DummyCandidatesCost) {
 }
 
 TEST(ImmutableConverterTest, DummyCandidatesInnerSegmentBoundary) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   Segment segment;
   SetCandidate("てすと", "test", &segment);
-  Segment::Candidate *c = segment.mutable_candidate(0);
-  c->PushBackInnerSegmentBoundary(3, 2, 3, 2);
-  c->PushBackInnerSegmentBoundary(6, 2, 6, 2);
-  EXPECT_TRUE(c->IsValid());
+  Candidate* c = segment.mutable_candidate(0);
+  c->inner_segment_boundary = converter::BuildInnerSegmentBoundary(
+      {{3, 2, 3, 2}, {6, 2, 6, 2}}, c->key, c->value);
+  EXPECT_EQ(c->inner_segment_boundary.size(), 2);
 
   data_and_converter->GetConverterTestPeer().InsertDummyCandidates(&segment,
                                                                    10);
   ASSERT_GE(segment.candidates_size(), 3);
   for (size_t i = 1; i < 3; ++i) {
     EXPECT_TRUE(segment.candidate(i).inner_segment_boundary.empty());
-    EXPECT_TRUE(segment.candidate(i).IsValid());
   }
 }
 
@@ -222,25 +225,25 @@ class KeyCheckDictionary : public DictionaryInterface {
   bool HasKey(absl::string_view key) const override { return false; }
   bool HasValue(absl::string_view value) const override { return false; }
 
-  void LookupPredictive(absl::string_view key, const ConversionRequest &convreq,
-                        Callback *callback) const override {
+  void LookupPredictive(absl::string_view key, const ConversionRequest& convreq,
+                        Callback* callback) const override {
     if (key == target_query_) {
       received_target_query_ = true;
     }
   }
 
-  void LookupPrefix(absl::string_view key, const ConversionRequest &convreq,
-                    Callback *callback) const override {
+  void LookupPrefix(absl::string_view key, const ConversionRequest& convreq,
+                    Callback* callback) const override {
     // No check
   }
 
-  void LookupExact(absl::string_view key, const ConversionRequest &convreq,
-                   Callback *callback) const override {
+  void LookupExact(absl::string_view key, const ConversionRequest& convreq,
+                   Callback* callback) const override {
     // No check
   }
 
-  void LookupReverse(absl::string_view str, const ConversionRequest &convreq,
-                     Callback *callback) const override {
+  void LookupReverse(absl::string_view str, const ConversionRequest& convreq,
+                     Callback* callback) const override {
     // No check
   }
 
@@ -255,10 +258,10 @@ class KeyCheckDictionary : public DictionaryInterface {
 }  // namespace
 
 TEST(ImmutableConverterTest, InnerSegmenBoundaryForPrediction) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   Segments segments;
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   const std::string kRequestKey = "わたしのなまえはなかのです";
   segment->set_key(kRequestKey);
   const ConversionRequest request =
@@ -266,17 +269,14 @@ TEST(ImmutableConverterTest, InnerSegmenBoundaryForPrediction) {
           .SetOptions({.request_type = ConversionRequest::PREDICTION,
                        .max_conversion_candidates_size = 1})
           .Build();
-  EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(request,
-                                                                    &segments));
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(request, &segments));
   ASSERT_EQ(1, segments.segments_size());
   ASSERT_EQ(1, segments.segment(0).candidates_size());
 
   // Result will be, "私の|名前は|中ノです" with mock dictionary.
-  const Segment::Candidate &cand = segments.segment(0).candidate(0);
-  EXPECT_TRUE(cand.IsValid());
+  const Candidate& cand = segments.segment(0).candidate(0);
   std::vector<absl::string_view> keys, values, content_keys, content_values;
-  for (Segment::Candidate::InnerSegmentIterator iter(&cand); !iter.Done();
-       iter.Next()) {
+  for (const auto& iter : cand.inner_segments()) {
     keys.push_back(iter.GetKey());
     values.push_back(iter.GetValue());
     content_keys.push_back(iter.GetContentKey());
@@ -304,35 +304,34 @@ TEST(ImmutableConverterTest, InnerSegmenBoundaryForPrediction) {
 }
 
 TEST(ImmutableConverterTest, NoInnerSegmenBoundaryForConversion) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   Segments segments;
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   const std::string kRequestKey = "わたしのなまえはなかのです";
   segment->set_key(kRequestKey);
   const ConversionRequest request =
       ConversionRequestBuilder()
           .SetRequestType(ConversionRequest::CONVERSION)
           .Build();
-  EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(request,
-                                                                    &segments));
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(request, &segments));
   EXPECT_LE(1, segments.segments_size());
   EXPECT_LT(0, segments.segment(0).candidates_size());
   for (size_t i = 0; i < segments.segment(0).candidates_size(); ++i) {
-    const Segment::Candidate &cand = segments.segment(0).candidate(i);
+    const Candidate& cand = segments.segment(0).candidate(i);
     EXPECT_TRUE(cand.inner_segment_boundary.empty());
   }
 }
 
 TEST(ImmutableConverterTest, MakeLatticeKatakana) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   ImmutableConverterTestPeer converter =
       data_and_converter->GetConverterTestPeer();
 
   Segments segments;
 
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   segment->set_segment_type(Segment::FREE);
   segment->set_key("カタカナです");
 
@@ -343,20 +342,20 @@ TEST(ImmutableConverterTest, MakeLatticeKatakana) {
 
   // If the first character of a node is `ALPHABET` or `KATAKANA`,
   // `AddCharacterTypeBasedNodes` should create a node of the character type.
-  Node *node = lattice.begin_nodes(0);
+  const Node* node = lattice.begin_nodes(0).back();
   EXPECT_EQ(node->key, "カタカナ");
   EXPECT_EQ(node->value, "カタカナ");
 }
 
 TEST(ImmutableConverterTest, NotConnectedTest) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   ImmutableConverterTestPeer converter =
       data_and_converter->GetConverterTestPeer();
 
   Segments segments;
 
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   segment->set_segment_type(Segment::FIXED_BOUNDARY);
   segment->set_key("しょうめい");
 
@@ -374,13 +373,12 @@ TEST(ImmutableConverterTest, NotConnectedTest) {
   // Intentionally segmented position - 1
   const size_t pos = strlen("しょうめ");
   bool tested = false;
-  for (Node *rnode = lattice.begin_nodes(pos); rnode != nullptr;
-       rnode = rnode->bnext) {
+  for (const Node* rnode : lattice.begin_nodes(pos)) {
     if (Util::CharsLen(rnode->key) <= 1) {
       continue;
     }
     // If len(rnode->value) > 1, that node should cross over the boundary
-    EXPECT_TRUE(rnode->prev == nullptr);
+    EXPECT_EQ(rnode->prev, nullptr);
     tested = true;
   }
   EXPECT_TRUE(tested);
@@ -397,29 +395,28 @@ TEST(ImmutableConverterTest, HistoryKeyLengthIsVeryLong) {
   // Set up history segments.
   Segments segments;
   for (int i = 0; i < 4; ++i) {
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_key(kA100);
     segment->set_segment_type(Segment::HISTORY);
-    Segment::Candidate *candidate = segment->add_candidate();
+    Candidate* candidate = segment->add_candidate();
     candidate->key = kA100;
     candidate->value = kA100;
   }
 
   // Set up a conversion segment.
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   const std::string kRequestKey = "あ";
   segment->set_key(kRequestKey);
 
   // Verify that history segments are cleared due to its length limit and at
   // least one candidate is generated.
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   const ConversionRequest request =
       ConversionRequestBuilder()
           .SetRequestType(ConversionRequest::CONVERSION)
           .Build();
-  EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(request,
-                                                                    &segments));
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(request, &segments));
   EXPECT_EQ(segments.history_segments_size(), 0);
   ASSERT_EQ(segments.conversion_segments_size(), 1);
   EXPECT_GT(segments.segment(0).candidates_size(), 0);
@@ -427,9 +424,9 @@ TEST(ImmutableConverterTest, HistoryKeyLengthIsVeryLong) {
 }
 
 namespace {
-bool AutoPartialSuggestionTestHelper(const ConversionRequest &request) {
-  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter(
-      new MockDataAndImmutableConverter);
+bool AutoPartialSuggestionTestHelper(const ConversionRequest& request) {
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
   Segments segments;
   ConversionRequest::Options options = request.options();
   options.request_type = ConversionRequest::PREDICTION;
@@ -439,17 +436,17 @@ bool AutoPartialSuggestionTestHelper(const ConversionRequest &request) {
           .SetConversionRequest(request)
           .SetOptions(std::move(options))
           .Build();
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   const std::string kRequestKey = "わたしのなまえはなかのです";
   segment->set_key(kRequestKey);
-  EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-      conversion_request, &segments));
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(conversion_request,
+                                                          &segments));
   EXPECT_EQ(segments.conversion_segments_size(), 1);
   EXPECT_LT(0, segments.segment(0).candidates_size());
   bool includes_only_first = false;
   absl::string_view segment_key = segments.segment(0).key();
   for (size_t i = 0; i < segments.segment(0).candidates_size(); ++i) {
-    const Segment::Candidate &cand = segments.segment(0).candidate(i);
+    const Candidate& cand = segments.segment(0).candidate(i);
     if (cand.key.size() < segment_key.size() &&
         segment_key.starts_with(cand.key)) {
       includes_only_first = true;
@@ -498,13 +495,13 @@ TEST(ImmutableConverterTest, FirstInnerSegment) {
   auto data_and_converter = std::make_unique<MockDataAndImmutableConverter>();
 
   Segments segments;
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   segment->set_key("くるまでこうどうした");
-  EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-      conversion_request, &segments));
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(conversion_request,
+                                                          &segments));
 
-  constexpr auto KeyIs = [](const auto &key) {
-    return Field(&Segment::Candidate::key, StrEq(key));
+  constexpr auto KeyIs = [](const auto& key) {
+    return Field(&Candidate::key, StrEq(key));
   };
 
   EXPECT_THAT(*segment, ContainsCandidate(KeyIs("くるまでこうどうした")));
@@ -526,16 +523,16 @@ TEST(ImmutableConverterTest, FirstInnerSegmentFiltering) {
           .Build();
 
   auto data_and_converter = std::make_unique<MockDataAndImmutableConverter>();
-  constexpr auto ValueIs = [](const auto &value) {
-    return Field(&Segment::Candidate::value, StrEq(value));
+  constexpr auto ValueIs = [](const auto& value) {
+    return Field(&Candidate::value, StrEq(value));
   };
 
   {
     Segments segments;
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_key("したとき");
-    EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-        conversion_request, &segments));
+    EXPECT_TRUE(data_and_converter->GetConverter()->Convert(conversion_request,
+                                                            &segments));
 
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("した時")));
     // The same segment structure, but included by char coverage rule.
@@ -543,10 +540,10 @@ TEST(ImmutableConverterTest, FirstInnerSegmentFiltering) {
   }
   {
     Segments segments;
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_key("のとき");
-    EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-        conversion_request, &segments));
+    EXPECT_TRUE(data_and_converter->GetConverter()->Convert(conversion_request,
+                                                            &segments));
 
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("の時")));
     // The same segment structure, included by char coverage.
@@ -554,10 +551,10 @@ TEST(ImmutableConverterTest, FirstInnerSegmentFiltering) {
   }
   {
     Segments segments;
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_key("かえる");
-    EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-        conversion_request, &segments));
+    EXPECT_TRUE(data_and_converter->GetConverter()->Convert(conversion_request,
+                                                            &segments));
 
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("換える")));
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("代える")));
@@ -567,16 +564,54 @@ TEST(ImmutableConverterTest, FirstInnerSegmentFiltering) {
   }
   {
     Segments segments;
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_key("くるまでこうどうした");
-    EXPECT_TRUE(data_and_converter->GetConverter()->ConvertForRequest(
-        conversion_request, &segments));
+    EXPECT_TRUE(data_and_converter->GetConverter()->Convert(conversion_request,
+                                                            &segments));
 
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("車で行動した")));
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("車で")));
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("来るまで")));
     EXPECT_THAT(*segment, ContainsCandidate(ValueIs("くるまで")));
   }
+}
+
+// Confirm t13n (Hiragana to English) conversions twice work (b/427316871).
+TEST(ImmutableConverterTest, T13nConversionTwice) {
+  std::unique_ptr<MockDataAndImmutableConverter> data_and_converter =
+      std::make_unique<MockDataAndImmutableConverter>();
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("ぐうぐる");
+  }
+  const ConversionRequest request;
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(request, &segments));
+  ASSERT_EQ(segments.segments_size(), 1);
+
+  const int index =
+      GetCandidateIndexByValue("Google", segments.conversion_segment(0));
+  ASSERT_NE(index, -1);
+
+  {  // Make the existing segment HISTORY
+    Segment& segment = *segments.mutable_segment(0);
+    segment.set_segment_type(Segment::HISTORY);
+    segment.move_candidate(index, 0);
+    if (index != 0) {
+      segment.mutable_candidate(0)->attributes |= Attribute::RERANKED;
+    }
+  }
+
+  {  // Add a new segment for t13n conversion again.
+    Segment* segment = segments.add_segment();
+    segment->set_key("ぐーぐる");
+  }
+  EXPECT_TRUE(data_and_converter->GetConverter()->Convert(request, &segments));
+  ASSERT_EQ(segments.segments_size(), 2);
+  ASSERT_EQ(segments.conversion_segments_size(), 1);
+
+  ASSERT_NE(GetCandidateIndexByValue("Google", segments.conversion_segment(0)),
+            -1);
 }
 
 }  // namespace mozc

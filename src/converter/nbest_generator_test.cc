@@ -36,9 +36,9 @@
 #include <vector>
 
 #include "absl/log/check.h"
-#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "converter/candidate.h"
 #include "converter/immutable_converter.h"
 #include "converter/lattice.h"
 #include "converter/node.h"
@@ -53,9 +53,11 @@
 
 namespace mozc {
 
+using ::mozc::converter::Candidate;
+
 class ImmutableConverterTestPeer : testing::TestPeer<ImmutableConverter> {
  public:
-  explicit ImmutableConverterTestPeer(ImmutableConverter &converter)
+  explicit ImmutableConverterTestPeer(ImmutableConverter& converter)
       : testing::TestPeer<ImmutableConverter>(converter) {}
 
   // Make them public via peer class.
@@ -77,12 +79,12 @@ class MockDataAndImmutableConverter {
     immutable_converter_ = std::make_unique<ImmutableConverter>(*modules_);
   }
 
-  ImmutableConverter *GetConverter() { return immutable_converter_.get(); }
+  ImmutableConverter* GetConverter() { return immutable_converter_.get(); }
   ImmutableConverterTestPeer GetConverterTestPeer() {
     return ImmutableConverterTestPeer(*immutable_converter_);
   }
 
-  std::unique_ptr<NBestGenerator> CreateNBestGenerator(const Lattice &lattice) {
+  std::unique_ptr<NBestGenerator> CreateNBestGenerator(const Lattice& lattice) {
     return std::make_unique<NBestGenerator>(
         modules_->GetUserDictionary(), modules_->GetSegmenter(),
         modules_->GetConnector(), modules_->GetPosMatcher(), lattice,
@@ -102,13 +104,13 @@ ConversionRequest ConvReq(ConversionRequest::RequestType request_type) {
 
 class NBestGeneratorTest : public ::testing::Test {
  protected:
-  const Node *GetEndNode(const ConversionRequest &request,
-                         ImmutableConverterTestPeer &converter,
-                         const Segments &segments, const Node &begin_node,
+  const Node* GetEndNode(const ConversionRequest& request,
+                         ImmutableConverterTestPeer& converter,
+                         const Segments& segments, const Node& begin_node,
                          absl::Span<const uint16_t> group,
                          bool is_single_segment) {
-    const Node *end_node = nullptr;
-    for (Node *node = begin_node.next; node->next != nullptr;
+    const Node* end_node = nullptr;
+    for (const Node* node = begin_node.next; node->next != nullptr;
          node = node->next) {
       end_node = node->next;
       if (converter.IsSegmentEndNode(request, segments, node, group,
@@ -127,7 +129,7 @@ TEST_F(NBestGeneratorTest, MultiSegmentConnectionTest) {
 
   Segments segments;
   {
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_segment_type(Segment::FIXED_BOUNDARY);
     segment->set_key("しんこう");
 
@@ -148,8 +150,8 @@ TEST_F(NBestGeneratorTest, MultiSegmentConnectionTest) {
       data_and_converter->CreateNBestGenerator(lattice);
 
   constexpr bool kSingleSegment = false;  // For 'normal' conversion
-  const Node *begin_node = lattice.bos_nodes();
-  const Node *end_node = GetEndNode(request, converter, segments, *begin_node,
+  const Node* begin_node = lattice.bos_node();
+  const Node* end_node = GetEndNode(request, converter, segments, *begin_node,
                                     group, kSingleSegment);
   {
     nbest_generator->Reset(
@@ -187,7 +189,7 @@ TEST_F(NBestGeneratorTest, SingleSegmentConnectionTest) {
   Segments segments;
   std::string kText = "わたしのなまえはなかのです";
   {
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_segment_type(Segment::FREE);
     segment->set_key(kText);
   }
@@ -204,8 +206,8 @@ TEST_F(NBestGeneratorTest, SingleSegmentConnectionTest) {
       data_and_converter->CreateNBestGenerator(lattice);
 
   constexpr bool kSingleSegment = true;  // For real time conversion
-  const Node *begin_node = lattice.bos_nodes();
-  const Node *end_node = GetEndNode(request, converter, segments, *begin_node,
+  const Node* begin_node = lattice.bos_node();
+  const Node* end_node = GetEndNode(request, converter, segments, *begin_node,
                                     group, kSingleSegment);
   {
     nbest_generator->Reset(
@@ -238,7 +240,7 @@ TEST_F(NBestGeneratorTest, InnerSegmentBoundary) {
   Segments segments;
   const std::string kInput = "とうきょうかなごやにいきたい";
   {
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_segment_type(Segment::FREE);
     segment->set_key(kInput);
   }
@@ -255,8 +257,8 @@ TEST_F(NBestGeneratorTest, InnerSegmentBoundary) {
       data_and_converter->CreateNBestGenerator(lattice);
 
   constexpr bool kSingleSegment = true;  // For real time conversion
-  const Node *begin_node = lattice.bos_nodes();
-  const Node *end_node = GetEndNode(request, converter, segments, *begin_node,
+  const Node* begin_node = lattice.bos_node();
+  const Node* end_node = GetEndNode(request, converter, segments, *begin_node,
                                     group, kSingleSegment);
 
   nbest_generator->Reset(
@@ -266,13 +268,12 @@ TEST_F(NBestGeneratorTest, InnerSegmentBoundary) {
   nbest_generator->SetCandidates(request, "", 10, &result_segment);
   ASSERT_LE(1, result_segment.candidates_size());
 
-  const Segment::Candidate &top_cand = result_segment.candidate(0);
+  const Candidate& top_cand = result_segment.candidate(0);
   EXPECT_EQ(top_cand.key, kInput);
   EXPECT_EQ(top_cand.value, "東京か名古屋に行きたい");
 
   std::vector<absl::string_view> keys, values, content_keys, content_values;
-  for (Segment::Candidate::InnerSegmentIterator iter(&top_cand); !iter.Done();
-       iter.Next()) {
+  for (const auto& iter : top_cand.inner_segments()) {
     keys.push_back(iter.GetKey());
     values.push_back(iter.GetValue());
     content_keys.push_back(iter.GetContentKey());
@@ -313,7 +314,7 @@ TEST_F(NBestGeneratorTest, NoPartialCandidateBetweenAlphabets) {
   Segments segments;
   const std::string kInput = "AAA";
   {
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_segment_type(Segment::FREE);
     segment->set_key(kInput);
   }
@@ -330,8 +331,8 @@ TEST_F(NBestGeneratorTest, NoPartialCandidateBetweenAlphabets) {
       data_and_converter->CreateNBestGenerator(lattice);
 
   constexpr bool kSingleSegment = true;  // For real time conversion
-  const Node *begin_node = lattice.bos_nodes();
-  const Node *end_node = GetEndNode(request, converter, segments, *begin_node,
+  const Node* begin_node = lattice.bos_node();
+  const Node* end_node = GetEndNode(request, converter, segments, *begin_node,
                                     group, kSingleSegment);
 
   // Since the test dictionary contains "A", partial candidates "A" and "AA" can
@@ -346,7 +347,7 @@ TEST_F(NBestGeneratorTest, NoPartialCandidateBetweenAlphabets) {
   Segment result_segment;
   nbest_generator->SetCandidates(request, "", 10, &result_segment);
   EXPECT_THAT(result_segment, HasSingleCandidate(::testing::Field(
-                                  "value", &Segment::Candidate::value, "AAA")));
+                                  "value", &Candidate::value, "AAA")));
 }
 
 TEST_F(NBestGeneratorTest, NoAlphabetsConnection2Nodes) {
@@ -357,7 +358,7 @@ TEST_F(NBestGeneratorTest, NoAlphabetsConnection2Nodes) {
   Segments segments;
   std::string kText = "eupho";
   {
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_segment_type(Segment::FREE);
     segment->set_key(kText);
   }
@@ -374,8 +375,8 @@ TEST_F(NBestGeneratorTest, NoAlphabetsConnection2Nodes) {
       data_and_converter->CreateNBestGenerator(lattice);
 
   constexpr bool kSingleSegment = true;  // For real time conversion
-  const Node *begin_node = lattice.bos_nodes();
-  const Node *end_node = GetEndNode(request, converter, segments, *begin_node,
+  const Node* begin_node = lattice.bos_node();
+  const Node* end_node = GetEndNode(request, converter, segments, *begin_node,
                                     group, kSingleSegment);
   nbest_generator->Reset(
       begin_node, end_node,
@@ -385,9 +386,8 @@ TEST_F(NBestGeneratorTest, NoAlphabetsConnection2Nodes) {
   // The test dictionary contains key value pairs (eu, EU) and (pho, pho), but
   // "EUpho" should not be generated as it is a concatenation of two alphabet
   // words. The only expected candidate is (eupho, eupho).
-  EXPECT_THAT(result_segment,
-              HasSingleCandidate(::testing::Field(
-                  "value", &Segment::Candidate::value, "eupho")));
+  EXPECT_THAT(result_segment, HasSingleCandidate(::testing::Field(
+                                  "value", &Candidate::value, "eupho")));
 }
 
 TEST_F(NBestGeneratorTest, NoAlphabetsConnection3Nodes) {
@@ -398,7 +398,7 @@ TEST_F(NBestGeneratorTest, NoAlphabetsConnection3Nodes) {
   Segments segments;
   std::string kText = "euphoとうきょう";
   {
-    Segment *segment = segments.add_segment();
+    Segment* segment = segments.add_segment();
     segment->set_segment_type(Segment::FREE);
     segment->set_key(kText);
   }
@@ -415,8 +415,8 @@ TEST_F(NBestGeneratorTest, NoAlphabetsConnection3Nodes) {
       data_and_converter->CreateNBestGenerator(lattice);
 
   constexpr bool kSingleSegment = true;  // For real time conversion
-  const Node *begin_node = lattice.bos_nodes();
-  const Node *end_node = GetEndNode(request, converter, segments, *begin_node,
+  const Node* begin_node = lattice.bos_node();
+  const Node* end_node = GetEndNode(request, converter, segments, *begin_node,
                                     group, kSingleSegment);
   nbest_generator->Reset(
       begin_node, end_node,

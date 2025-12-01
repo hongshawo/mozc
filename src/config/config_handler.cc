@@ -69,8 +69,8 @@ constexpr absl::string_view kFileNamePrefix = "user://config";
 void AddCharacterFormRule(const absl::string_view group,
                           const Config::CharacterForm preedit_form,
                           const Config::CharacterForm conversion_form,
-                          Config *config) {
-  Config::CharacterFormRule *rule = config->add_character_form_rules();
+                          Config* config) {
+  Config::CharacterFormRule* rule = config->add_character_form_rules();
   rule->set_group(group);
   rule->set_preedit_character_form(preedit_form);
   rule->set_conversion_character_form(conversion_form);
@@ -119,8 +119,8 @@ Config CreateDefaultConfig() {
   return config;
 }
 
-void SetMetaData(Config *config) {
-  GeneralConfig *general_config = config->mutable_general_config();
+void SetMetaData(Config* config) {
+  GeneralConfig* general_config = config->mutable_general_config();
   general_config->set_config_version(kConfigVersion);
   general_config->set_last_modified_time(
       absl::ToUnixSeconds(Clock::GetAbslTime()));
@@ -128,7 +128,7 @@ void SetMetaData(Config *config) {
   general_config->set_platform(SystemUtil::GetOSVersionString());
 }
 
-void NormalizeConfig(Config *config) {
+void NormalizeConfig(Config* config) {
 #ifdef NDEBUG
   // Delete the optional field from the config.
   config->clear_verbose_level();
@@ -186,7 +186,7 @@ class ConfigHandlerImpl final {
   mutable absl::Mutex mutex_;
 };
 
-ConfigHandlerImpl *GetConfigHandlerImpl() {
+ConfigHandlerImpl* GetConfigHandlerImpl() {
   return Singleton<ConfigHandlerImpl>::get();
 }
 
@@ -206,7 +206,7 @@ void ConfigHandlerImpl::SetConfigInternal(std::shared_ptr<Config> config) {
 }
 
 void ConfigHandlerImpl::SetConfig(Config config) {
-  const uint64_t config_hash = Fingerprint(config.SerializeAsString());
+  const uint64_t config_hash = CityFingerprint(config.SerializeAsString());
 
   // If the wire format of config is identical to the one of the previously
   // stored config, skip updating.
@@ -222,7 +222,8 @@ void ConfigHandlerImpl::SetConfig(Config config) {
   // If the wire format of the config w/o metadata is identical to the one of
   // the previous config, skip updating.
   output_config->mutable_general_config()->clear_last_modified_time();
-  const uint64_t content_hash = Fingerprint(output_config->SerializeAsString());
+  const uint64_t content_hash =
+      CityFingerprint(output_config->SerializeAsString());
   if (content_hash_ == content_hash) {
     return;
   }
@@ -230,7 +231,7 @@ void ConfigHandlerImpl::SetConfig(Config config) {
 
   // Set metadata and update `config_hash_`.
   SetMetaData(output_config.get());
-  config_hash_ = Fingerprint(output_config->SerializeAsString());
+  config_hash_ = CityFingerprint(output_config->SerializeAsString());
 
   const std::string filename = GetConfigFileName();
 
@@ -275,7 +276,7 @@ void ConfigHandlerImpl::Reload() {
 
 void ConfigHandlerImpl::SetConfigFileName(const absl::string_view filename) {
   {
-    absl::WriterMutexLock lock(&mutex_);
+    absl::WriterMutexLock lock(mutex_);
     MOZC_VLOG(1) << "set new config file name: " << filename;
     strings::Assign(filename_, filename);
   }
@@ -283,7 +284,7 @@ void ConfigHandlerImpl::SetConfigFileName(const absl::string_view filename) {
 }
 
 std::string ConfigHandlerImpl::GetConfigFileName() const {
-  absl::ReaderMutexLock lock(&mutex_);
+  absl::ReaderMutexLock lock(mutex_);
   return filename_;
 }
 }  // namespace
@@ -299,7 +300,7 @@ void ConfigHandler::SetConfig(Config config) {
 }
 
 // static
-void ConfigHandler::GetDefaultConfig(Config *config) {
+void ConfigHandler::GetDefaultConfig(Config* config) {
   *config = DefaultConfig();
 }
 
@@ -308,7 +309,7 @@ std::shared_ptr<const Config> ConfigHandler::GetSharedDefaultConfig() {
 }
 
 // static
-const Config &ConfigHandler::DefaultConfig() {
+const Config& ConfigHandler::DefaultConfig() {
   return *GetSharedDefaultConfig();  // NOLINT: The referenced object has static
                                      // lifetime.
 }

@@ -5,7 +5,8 @@ name: CI for Linux
 # on: push
 on: workflow_dispatch
 
-permissions: read-all
+permissions:
+  contents: read
 
 # Prevent previous workflows from running.
 concurrency:
@@ -20,9 +21,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Setup
         run: |
@@ -51,9 +53,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Setup
         run: |

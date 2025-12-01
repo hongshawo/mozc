@@ -27,54 +27,22 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifdef __APPLE__
+#include "win32/tip/tip_candidate_string.h"
 
-#import "base/crash_report_handler.h"
+#include <objbase.h>
+#include <oleauto.h>
 
-#import "base/const.h"
+#include "absl/base/nullability.h"
+#include "base/win32/com.h"
 
-#import <Breakpad/Breakpad.h>
-#import <CoreFoundation/CoreFoundation.h>
+namespace mozc::win32::tsf {
 
-namespace mozc {
-
-// The reference count for Breakpad
-int g_reference_count = 0;
-
-BreakpadRef g_breakpad = nullptr;
-
-bool CrashReportHandler::Initialize(bool check_address) {
-  ++g_reference_count;
-  @autoreleasepool {
-    NSMutableDictionary *plist = [[[NSBundle mainBundle] infoDictionary] mutableCopy];
-    if (g_reference_count == 1 && plist != nullptr && g_breakpad == nullptr) {
-      // Create a crash reports directory under tmpdir, and set it to the plist
-      NSString *tmpDir = NSTemporaryDirectory();
-      // crashDir will be $TMPDIR/GoogleJapaneseInput/CrashReports
-      NSString *crashDir =
-          [NSString pathWithComponents:@[ tmpDir, @kProductPrefix, @"CrashReports" ]];
-      [[NSFileManager defaultManager] createDirectoryAtPath:crashDir
-                                withIntermediateDirectories:YES
-                                                 attributes:nil
-                                                      error:NULL];
-      [plist setValue:crashDir forKey:@BREAKPAD_DUMP_DIRECTORY];
-      g_breakpad = BreakpadCreate(plist);
-      return true;
-    }
-  }
-  return false;
+STDMETHODIMP TipCandidateString::GetString(BSTR* absl_nullable str) {
+  return SaveToOutParam(MakeUniqueBSTR(value_), str);
 }
 
-bool CrashReportHandler::Uninitialize() {
-  --g_reference_count;
-  if (g_reference_count == 0 && g_breakpad != nullptr) {
-    BreakpadRelease(g_breakpad);
-    g_breakpad = nullptr;
-    return true;
-  }
-  return false;
+STDMETHODIMP TipCandidateString::GetIndex(ULONG* absl_nullable index) {
+  return SaveToOutParam(index_, index);
 }
 
-}  // namespace mozc
-
-#endif  // __APPLE__
+}  // namespace mozc::win32::tsf

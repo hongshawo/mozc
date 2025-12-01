@@ -27,17 +27,28 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef MOZC_BASE_ABSL_NULLABILITY_H_
-#define MOZC_BASE_ABSL_NULLABILITY_H_
+#include "win32/tip/tip_candidate_string.h"
 
-#include "absl/base/nullability.h"  // IWYU pragma: export
+#include <wil/resource.h>
 
-// This is for backward compatibility with the Abseil LTS version 20250127.1.
-// TODO(b/397718233): Remove this once the latest LTS version supports lower
-// case macros.
-#ifndef absl_nullable
-#define absl_nullable ABSL_NULLABLE
-#define absl_nonnull ABSL_NONNULL
-#endif  // absl_nullable
+#include "testing/gmock.h"
+#include "testing/gunit.h"
+#include "win32/tip/gmock_matchers.h"
 
-#endif  // MOZC_BASE_ABSL_NULLABILITY_H_
+namespace mozc::win32::tsf {
+namespace {
+
+TEST(TipCandidateStringTest, Success) {
+  TipCandidateString candidate(1, L"Hello");
+  EXPECT_THAT(&candidate, CandidateStringIndexIs(1));
+  EXPECT_THAT(&candidate, CandidateStringIs(L"Hello"));
+}
+
+TEST(TipCandidateStringTest, Nullptr) {
+  TipCandidateString candidate(0, L"Hello");
+  EXPECT_EQ(candidate.GetString(nullptr), E_INVALIDARG);
+  EXPECT_EQ(candidate.GetIndex(nullptr), E_INVALIDARG);
+}
+
+}  // namespace
+}  // namespace mozc::win32::tsf

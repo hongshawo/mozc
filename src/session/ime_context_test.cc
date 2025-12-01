@@ -32,10 +32,12 @@
 #include <memory>
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "composer/composer.h"
 #include "composer/table.h"
 #include "config/config_handler.h"
+#include "converter/candidate.h"
 #include "converter/converter_interface.h"
 #include "converter/converter_mock.h"
 #include "converter/segments.h"
@@ -117,9 +119,9 @@ TEST(ImeContextTest, CopyContext) {
   auto converter = std::make_shared<MockConverter>();
 
   Segments segments;
-  Segment *segment = segments.add_segment();
+  Segment* segment = segments.add_segment();
   segment->set_key("あん");
-  Segment::Candidate *candidate = segment->add_candidate();
+  converter::Candidate* candidate = segment->add_candidate();
   candidate->value = "庵";
   EXPECT_CALL(*converter, StartConversion(_, _))
       .WillOnce(DoAll(SetArgPointee<1>(segments), Return(true)));

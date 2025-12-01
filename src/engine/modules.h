@@ -31,7 +31,6 @@
 #define MOZC_ENGINE_MODULES_H_
 
 #include <memory>
-#include <utility>
 
 #include "absl/log/check.h"
 #include "absl/status/status.h"
@@ -41,8 +40,8 @@
 #include "dictionary/dictionary_interface.h"
 #include "dictionary/pos_group.h"
 #include "dictionary/pos_matcher.h"
+#include "dictionary/single_kanji_dictionary.h"
 #include "engine/supplemental_model_interface.h"
-#include "prediction/single_kanji_prediction_aggregator.h"
 #include "prediction/suggestion_filter.h"
 #include "prediction/zero_query_dict.h"
 
@@ -51,68 +50,67 @@ namespace engine {
 
 class Modules {
  public:
-  Modules(const Modules &) = delete;
-  Modules &operator=(const Modules &) = delete;
+  Modules(const Modules&) = delete;
+  Modules& operator=(const Modules&) = delete;
 
   // Modules must be initialized via Create() method to
   // keep Modules as immutable as possible.
   static absl::StatusOr<std::unique_ptr<Modules>> Create(
       std::unique_ptr<const DataManager> data_manager);
 
-  const DataManager &GetDataManager() const {
+  const DataManager& GetDataManager() const {
     // DataManager must be valid.
     DCHECK(data_manager_);
     return *data_manager_;
   }
 
-  const dictionary::PosMatcher &GetPosMatcher() const {
+  const dictionary::PosMatcher& GetPosMatcher() const {
     DCHECK(pos_matcher_);
     return *pos_matcher_;
   }
 
-  const Connector &GetConnector() const { return connector_; }
+  const Connector& GetConnector() const { return connector_; }
 
-  const Segmenter &GetSegmenter() const {
+  const Segmenter& GetSegmenter() const {
     DCHECK(segmenter_);
     return *segmenter_;
   }
 
-  dictionary::UserDictionaryInterface &GetUserDictionary() const {
+  dictionary::UserDictionaryInterface& GetUserDictionary() const {
     DCHECK(user_dictionary_);
     return *user_dictionary_;
   }
 
-  const dictionary::DictionaryInterface &GetSuffixDictionary() const {
+  const dictionary::DictionaryInterface& GetSuffixDictionary() const {
     DCHECK(suffix_dictionary_);
     return *suffix_dictionary_;
   }
 
-  const dictionary::DictionaryInterface &GetDictionary() const {
+  const dictionary::DictionaryInterface& GetDictionary() const {
     DCHECK(dictionary_);
     return *dictionary_;
   }
 
-  const dictionary::PosGroup &GetPosGroup() const {
+  const dictionary::PosGroup& GetPosGroup() const {
     DCHECK(pos_group_);
     return *pos_group_;
   }
 
-  const SuggestionFilter &GetSuggestionFilter() const {
+  const SuggestionFilter& GetSuggestionFilter() const {
     return suggestion_filter_;
   }
 
-  const prediction::SingleKanjiPredictionAggregator &
-  GetSingleKanjiPredictionAggregator() const {
-    DCHECK(single_kanji_prediction_aggregator_);
-    return *single_kanji_prediction_aggregator_;
+  const dictionary::SingleKanjiDictionary& GetSingleKanjiDictionary() const {
+    DCHECK(single_kanji_dictionary_);
+    return *single_kanji_dictionary_;
   }
 
-  const ZeroQueryDict &GetZeroQueryDict() const { return zero_query_dict_; }
-  const ZeroQueryDict &GetZeroQueryNumberDict() const {
+  const ZeroQueryDict& GetZeroQueryDict() const { return zero_query_dict_; }
+  const ZeroQueryDict& GetZeroQueryNumberDict() const {
     return zero_query_number_dict_;
   }
 
-  engine::SupplementalModelInterface &GetSupplementalModel() const {
+  engine::SupplementalModelInterface& GetSupplementalModel() const {
     DCHECK(supplemental_model_);
     return *supplemental_model_;
   }
@@ -135,8 +133,8 @@ class Modules {
   std::unique_ptr<dictionary::DictionaryInterface> dictionary_;
   std::unique_ptr<const dictionary::PosGroup> pos_group_;
   SuggestionFilter suggestion_filter_;
-  std::unique_ptr<const prediction::SingleKanjiPredictionAggregator>
-      single_kanji_prediction_aggregator_;
+  std::unique_ptr<const dictionary::SingleKanjiDictionary>
+      single_kanji_dictionary_;
   ZeroQueryDict zero_query_dict_;
   ZeroQueryDict zero_query_number_dict_;
 
@@ -152,18 +150,18 @@ class ModulesPresetBuilder {
   ModulesPresetBuilder();
 
   // Preset functions must be called before Build().
-  ModulesPresetBuilder &PresetPosMatcher(
+  ModulesPresetBuilder& PresetPosMatcher(
       std::unique_ptr<const dictionary::PosMatcher> pos_matcher);
-  ModulesPresetBuilder &PresetUserDictionary(
+  ModulesPresetBuilder& PresetUserDictionary(
       std::unique_ptr<dictionary::UserDictionaryInterface> user_dictionary);
-  ModulesPresetBuilder &PresetSuffixDictionary(
+  ModulesPresetBuilder& PresetSuffixDictionary(
       std::unique_ptr<dictionary::DictionaryInterface> suffix_dictionary);
-  ModulesPresetBuilder &PresetDictionary(
+  ModulesPresetBuilder& PresetDictionary(
       std::unique_ptr<dictionary::DictionaryInterface> dictionary);
-  ModulesPresetBuilder &PresetSingleKanjiPredictionAggregator(
-      std::unique_ptr<const prediction::SingleKanjiPredictionAggregator>
-          single_kanji_prediction_aggregator);
-  ModulesPresetBuilder &PresetSupplementalModel(
+  ModulesPresetBuilder& PresetSingleKanjiDictionary(
+      std::unique_ptr<const dictionary::SingleKanjiDictionary>
+          single_kanji_dictionary);
+  ModulesPresetBuilder& PresetSupplementalModel(
       std::unique_ptr<engine::SupplementalModelInterface> supplemental_model);
   absl::StatusOr<std::unique_ptr<Modules>> Build(
       std::unique_ptr<const DataManager> data_manager);

@@ -5,7 +5,8 @@ name: CI for Lint checks
 # on: push
 on: workflow_dispatch
 
-permissions: read-all
+permissions:
+  contents: read
 
 # Prevent previous workflows from running.
 concurrency:
@@ -21,9 +22,10 @@ jobs:
     steps:
       # Checkout without submodules to exclude third_party code from lint check
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: false
+          persist-credentials: false
 
       - name: Run
         working-directory: ./src

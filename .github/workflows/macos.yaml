@@ -5,7 +5,8 @@ name: CI for macOS
 # on: push
 on: workflow_dispatch
 
-permissions: read-all
+permissions:
+  contents: read
 
 # Prevent previous workflows from running.
 concurrency:
@@ -14,15 +15,16 @@ concurrency:
 
 jobs:
   build_arm64:
-    # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md
-    runs-on: macos-14
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+    runs-on: macos-15
     timeout-minutes: 60
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Try to restore update_deps cache
         uses: actions/cache@v4
@@ -55,15 +57,16 @@ jobs:
           if-no-files-found: warn
 
   build_intel64:
-    # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md
-    runs-on: macos-14
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+    runs-on: macos-15
     timeout-minutes: 60
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Try to restore update_deps cache
         uses: actions/cache@v4
@@ -96,15 +99,16 @@ jobs:
           if-no-files-found: warn
 
   build_universal_binary:
-    # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md
-    runs-on: macos-14
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+    runs-on: macos-15
     timeout-minutes: 90
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Try to restore update_deps cache
         uses: actions/cache@v4
@@ -137,15 +141,16 @@ jobs:
           if-no-files-found: warn
 
   test:
-    # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md
-    runs-on: macos-14
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+    runs-on: macos-15
     timeout-minutes: 60
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Try to restore update_deps cache
         uses: actions/cache@v4
@@ -168,15 +173,16 @@ jobs:
   # in other jobs. Another approach would be to use "needs:".
   # https://docs.github.com/en/actions/using-jobs/using-jobs-in-a-workflow
   cache_deps:
-    # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md
-    runs-on: macos-14
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+    runs-on: macos-15
     timeout-minutes: 15
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: false
+          persist-credentials: false
 
       - name: Try to restore update_deps cache
         uses: actions/cache@v4

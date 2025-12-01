@@ -50,6 +50,8 @@
 #include "base/util.h"
 #include "base/version.h"
 #include "composer/composer.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
 #include "converter/segments.h"
 #include "engine/candidate_list.h"
 #include "protocol/candidate_window.pb.h"
@@ -59,8 +61,8 @@ namespace mozc {
 namespace engine {
 namespace {
 
-bool FillAnnotation(const Segment::Candidate &candidate_value,
-                    commands::Annotation *annotation) {
+bool FillAnnotation(const converter::Candidate& candidate_value,
+                    commands::Annotation* annotation) {
   bool is_modified = false;
   if (!candidate_value.prefix.empty()) {
     annotation->set_prefix(candidate_value.prefix);
@@ -79,17 +81,21 @@ bool FillAnnotation(const Segment::Candidate &candidate_value,
     is_modified = true;
   }
   if (candidate_value.attributes &
-      Segment::Candidate::USER_HISTORY_PREDICTION) {
+      converter::Attribute::USER_HISTORY_PREDICTION) {
     annotation->set_deletable(true);
+    is_modified = true;
+  }
+  if (!candidate_value.display_value.empty()) {
+    annotation->set_display_value(candidate_value.display_value);
     is_modified = true;
   }
   return is_modified;
 }
 
-void FillCandidateWord(const Segment::Candidate &segment_candidate,
+void FillCandidateWord(const converter::Candidate& segment_candidate,
                        const int id, const int index,
                        const absl::string_view base_key,
-                       commands::CandidateWord *candidate_word_proto) {
+                       commands::CandidateWord* candidate_word_proto) {
   candidate_word_proto->set_id(id);
   candidate_word_proto->set_index(index);
   if (base_key != segment_candidate.content_key) {
@@ -102,17 +108,18 @@ void FillCandidateWord(const Segment::Candidate &segment_candidate,
     *candidate_word_proto->mutable_annotation() = annotation;
   }
 
-  if (segment_candidate.attributes & Segment::Candidate::USER_DICTIONARY) {
+  if (segment_candidate.attributes & converter::Attribute::USER_DICTIONARY) {
     candidate_word_proto->add_attributes(commands::USER_DICTIONARY);
   }
   if (segment_candidate.attributes &
-      Segment::Candidate::USER_HISTORY_PREDICTION) {
+      converter::Attribute::USER_HISTORY_PREDICTION) {
     candidate_word_proto->add_attributes(commands::USER_HISTORY);
   }
-  if (segment_candidate.attributes & Segment::Candidate::SPELLING_CORRECTION) {
+  if (segment_candidate.attributes &
+      converter::Attribute::SPELLING_CORRECTION) {
     candidate_word_proto->add_attributes(commands::SPELLING_CORRECTION);
   }
-  if (segment_candidate.attributes & Segment::Candidate::TYPING_CORRECTION) {
+  if (segment_candidate.attributes & converter::Attribute::TYPING_CORRECTION) {
     candidate_word_proto->add_attributes(commands::TYPING_CORRECTION);
   }
 
@@ -130,17 +137,17 @@ void FillCandidateWord(const Segment::Candidate &segment_candidate,
 }
 
 void FillAllCandidateWordsInternal(
-    const Segment &segment, const CandidateList &candidate_list,
-    const int focused_id, commands::CandidateList *candidate_list_proto) {
+    const Segment& segment, const CandidateList& candidate_list,
+    const int focused_id, commands::CandidateList* candidate_list_proto) {
   for (size_t i = 0; i < candidate_list.size(); ++i) {
-    const Candidate &candidate = candidate_list.candidate(i);
+    const Candidate& candidate = candidate_list.candidate(i);
     if (candidate.HasSubcandidateList()) {
       FillAllCandidateWordsInternal(segment, candidate.subcandidate_list(),
                                     focused_id, candidate_list_proto);
       continue;
     }
 
-    commands::CandidateWord *candidate_word_proto =
+    commands::CandidateWord* candidate_word_proto =
         candidate_list_proto->add_candidates();
     const int id = candidate.id();
     const int index = candidate_list_proto->candidates_size() - 1;
@@ -157,7 +164,7 @@ void FillAllCandidateWordsInternal(
                  << ", actual candidates size: " << segment.candidates_size();
       return;
     }
-    const Segment::Candidate &segment_candidate = segment.candidate(id);
+    const converter::Candidate& segment_candidate = segment.candidate(id);
     FillCandidateWord(segment_candidate, id, index, segment.key(),
                       candidate_word_proto);
   }
@@ -166,8 +173,8 @@ void FillAllCandidateWordsInternal(
 
 namespace output {
 
-void FillCandidate(const Segment &segment, const Candidate &candidate,
-                   commands::CandidateWindow_Candidate *candidate_proto) {
+void FillCandidate(const Segment& segment, const Candidate& candidate,
+                   commands::CandidateWindow_Candidate* candidate_proto) {
   DCHECK(segment.is_valid_index(candidate.id()));
 
   if (candidate.HasSubcandidateList()) {
@@ -176,7 +183,8 @@ void FillCandidate(const Segment &segment, const Candidate &candidate,
     return;
   }
 
-  const Segment::Candidate &candidate_value = segment.candidate(candidate.id());
+  const converter::Candidate& candidate_value =
+      segment.candidate(candidate.id());
   candidate_proto->set_value(candidate_value.value);
 
   candidate_proto->set_id(candidate.id());
@@ -191,10 +199,10 @@ void FillCandidate(const Segment &segment, const Candidate &candidate,
   }
 }
 
-void FillCandidateWindow(const Segment &segment,
-                         const CandidateList &candidate_list,
+void FillCandidateWindow(const Segment& segment,
+                         const CandidateList& candidate_list,
                          const size_t position,
-                         commands::CandidateWindow *candidate_window_proto) {
+                         commands::CandidateWindow* candidate_window_proto) {
   if (candidate_list.focused()) {
     candidate_window_proto->set_focused_index(candidate_list.focused_index());
   }
@@ -207,7 +215,7 @@ void FillCandidateWindow(const Segment &segment,
 
   // Store candidates.
   for (size_t i = c_begin; i < c_end; ++i) {
-    const Candidate &candidate = candidate_list.candidate(i);
+    const Candidate& candidate = candidate_list.candidate(i);
     if (!segment.is_valid_index(candidate.id())) {
       LOG(ERROR) << "Inconsistency between segment and candidate_list was "
                     "observed. candidate index: "
@@ -215,7 +223,7 @@ void FillCandidateWindow(const Segment &segment,
                  << ", actual candidates size: " << segment.candidates_size();
       return;
     }
-    commands::CandidateWindow_Candidate *candidate_proto =
+    commands::CandidateWindow_Candidate* candidate_proto =
         candidate_window_proto->add_candidate();
     candidate_proto->set_index(i);
     FillCandidate(segment, candidate, candidate_proto);
@@ -233,32 +241,32 @@ void FillCandidateWindow(const Segment &segment,
   FillUsages(segment, candidate_list, candidate_window_proto);
 }
 
-void FillAllCandidateWords(const Segment &segment,
-                           const CandidateList &candidate_list,
+void FillAllCandidateWords(const Segment& segment,
+                           const CandidateList& candidate_list,
                            const commands::Category category,
-                           commands::CandidateList *candidate_list_proto) {
+                           commands::CandidateList* candidate_list_proto) {
   candidate_list_proto->set_category(category);
   FillAllCandidateWordsInternal(segment, candidate_list,
                                 candidate_list.focused_id(),
                                 candidate_list_proto);
 }
 
-void FillRemovedCandidates(const Segment &segment,
-                           commands::CandidateList *candidate_list_proto) {
+void FillRemovedCandidates(const Segment& segment,
+                           commands::CandidateList* candidate_list_proto) {
   int index = 1000;
-  absl::Span<const Segment::Candidate> candidates =
+  absl::Span<const converter::Candidate> candidates =
       segment.removed_candidates_for_debug_;
-  for (const Segment::Candidate &candidate : candidates) {
-    commands::CandidateWord *candidate_word_proto =
+  for (const converter::Candidate& candidate : candidates) {
+    commands::CandidateWord* candidate_word_proto =
         candidate_list_proto->add_candidates();
     FillCandidateWord(candidate, index, index, "", candidate_word_proto);
     index++;
   }
 }
 
-bool ShouldShowUsages(const Segment &segment, const CandidateList &cand_list) {
+bool ShouldShowUsages(const Segment& segment, const CandidateList& cand_list) {
   // Check if the shown candidate have the usage data.
-  for (const Candidate &candidate_ptr : cand_list.focused_page()) {
+  for (const Candidate& candidate_ptr : cand_list.focused_page()) {
     if (candidate_ptr.HasSubcandidateList()) {
       continue;
     }
@@ -269,32 +277,33 @@ bool ShouldShowUsages(const Segment &segment, const CandidateList &cand_list) {
   return false;
 }
 
-void FillUsages(const Segment &segment, const CandidateList &cand_list,
-                commands::CandidateWindow *candidate_window_proto) {
+void FillUsages(const Segment& segment, const CandidateList& cand_list,
+                commands::CandidateWindow* candidate_window_proto) {
   if (!ShouldShowUsages(segment, cand_list)) {
     return;
   }
 
-  commands::InformationList *usages = candidate_window_proto->mutable_usages();
+  commands::InformationList* usages = candidate_window_proto->mutable_usages();
 
   if (TargetIsAndroid()) {
     usages->set_delay(1000);
   }
 
-  using IndexInfoPair = std::pair<int32_t, commands::Information *>;
+  using IndexInfoPair = std::pair<int32_t, commands::Information*>;
   absl::flat_hash_map<int32_t, IndexInfoPair> usageid_information_map;
   // Store usages.
-  for (const Candidate &candidate_ptr : cand_list.focused_page()) {
+  for (const Candidate& candidate_ptr : cand_list.focused_page()) {
     if (candidate_ptr.HasSubcandidateList()) {
       continue;
     }
-    const Segment::Candidate &candidate = segment.candidate(candidate_ptr.id());
+    const converter::Candidate& candidate =
+        segment.candidate(candidate_ptr.id());
     if (candidate.usage_title.empty()) {
       continue;
     }
 
     int index;
-    commands::Information *info;
+    commands::Information* info;
     const auto info_iter = usageid_information_map.find(candidate.usage_id);
 
     if (info_iter == usageid_information_map.end()) {
@@ -318,7 +327,7 @@ void FillUsages(const Segment &segment, const CandidateList &cand_list,
 }
 
 void FillShortcuts(absl::string_view shortcuts,
-                   commands::CandidateWindow *candidate_window_proto) {
+                   commands::CandidateWindow* candidate_window_proto) {
   const size_t num_loop = std::min<size_t>(
       candidate_window_proto->candidate_size(), shortcuts.size());
   for (size_t i = 0; i < num_loop; ++i) {
@@ -328,7 +337,7 @@ void FillShortcuts(absl::string_view shortcuts,
   }
 }
 
-void FillSubLabel(commands::Footer *footer) {
+void FillSubLabel(commands::Footer* footer) {
   // Delete the label because sub_label will be drawn on the same
   // place for the label.
   footer->clear_label();
@@ -347,14 +356,14 @@ void FillSubLabel(commands::Footer *footer) {
 }
 
 bool FillFooter(const commands::Category category,
-                commands::CandidateWindow *candidate_window) {
+                commands::CandidateWindow* candidate_window) {
   if (category != commands::SUGGESTION && category != commands::PREDICTION &&
       category != commands::CONVERSION) {
     return false;
   }
 
   bool show_build_number = true;
-  commands::Footer *footer = candidate_window->mutable_footer();
+  commands::Footer* footer = candidate_window->mutable_footer();
   if (category == commands::SUGGESTION) {
     // TODO(komatsu): Enable to localized the message.
     constexpr absl::string_view kLabel = "Tabキーで選択";
@@ -369,7 +378,7 @@ bool FillFooter(const commands::Category category,
     // that it can be removed by Ctrl-Delete.
     if (candidate_window->has_focused_index()) {
       for (size_t i = 0; i < candidate_window->candidate_size(); ++i) {
-        const commands::CandidateWindow::Candidate &cand =
+        const commands::CandidateWindow::Candidate& cand =
             candidate_window->candidate(i);
         if (cand.index() != candidate_window->focused_index()) {
           continue;
@@ -406,7 +415,7 @@ bool FillFooter(const commands::Category category,
 }
 
 bool AddSegment(const absl::string_view key, const absl::string_view value,
-                const uint32_t segment_type_mask, commands::Preedit *preedit) {
+                const uint32_t segment_type_mask, commands::Preedit* preedit) {
   // Key is always normalized as a preedit text.
   std::string normalized_key = TextNormalizer::NormalizeText(key);
 
@@ -424,7 +433,7 @@ bool AddSegment(const absl::string_view key, const absl::string_view value,
     return false;
   }
 
-  commands::Preedit::Segment *segment = preedit->add_segment();
+  commands::Preedit::Segment* segment = preedit->add_segment();
   segment->set_key(std::move(normalized_key));
   segment->set_value_length(Util::CharsLen(normalized_value));
   segment->set_value(std::move(normalized_value));
@@ -437,8 +446,8 @@ bool AddSegment(const absl::string_view key, const absl::string_view value,
   return true;
 }
 
-void FillPreedit(const composer::Composer &composer,
-                 commands::Preedit *preedit) {
+void FillPreedit(const composer::Composer& composer,
+                 commands::Preedit* preedit) {
   const std::string output = composer.GetStringForPreedit();
 
   constexpr uint32_t kBaseType = PREEDIT;
@@ -447,24 +456,24 @@ void FillPreedit(const composer::Composer &composer,
   preedit->set_is_toggleable(composer.IsToggleable());
 }
 
-void FillConversion(const Segments &segments, const size_t segment_index,
-                    const int candidate_id, commands::Preedit *preedit) {
+void FillConversion(const Segments& segments, const size_t segment_index,
+                    const int candidate_id, commands::Preedit* preedit) {
   constexpr uint32_t kBaseType = CONVERSION;
   // Cursor position in conversion state should be the end of the preedit.
   size_t cursor = 0;
   const Segments::const_range conversion_segments =
       segments.conversion_segments();
-  const Segment &current_segment = conversion_segments[segment_index];
-  for (const Segment &segment : conversion_segments) {
+  const Segment& current_segment = conversion_segments[segment_index];
+  for (const Segment& segment : conversion_segments) {
     if (&segment == &current_segment) {
-      const std::string &value = segment.candidate(candidate_id).value;
+      const std::string& value = segment.candidate(candidate_id).value;
       if (AddSegment(segment.key(), value, kBaseType | FOCUSED, preedit) &&
           (!preedit->has_highlighted_position())) {
         preedit->set_highlighted_position(cursor);
       }
       cursor += Util::CharsLen(value);
     } else {
-      const std::string &value = segment.candidate(0).value;
+      const std::string& value = segment.candidate(0).value;
       AddSegment(segment.key(), value, kBaseType, preedit);
       cursor += Util::CharsLen(value);
     }
@@ -474,14 +483,14 @@ void FillConversion(const Segments &segments, const size_t segment_index,
 
 void FillConversionResultWithoutNormalization(std::string key,
                                               std::string result,
-                                              commands::Result *result_proto) {
+                                              commands::Result* result_proto) {
   result_proto->set_type(commands::Result::STRING);
   result_proto->set_key(std::move(key));
   result_proto->set_value(std::move(result));
 }
 
 void FillConversionResult(const absl::string_view key, std::string result,
-                          commands::Result *result_proto) {
+                          commands::Result* result_proto) {
   // Key should be normalized as a preedit text.
   std::string normalized_key = TextNormalizer::NormalizeText(key);
 
@@ -491,7 +500,7 @@ void FillConversionResult(const absl::string_view key, std::string result,
 }
 
 void FillPreeditResult(const absl::string_view preedit,
-                       commands::Result *result_proto) {
+                       commands::Result* result_proto) {
   std::string normalized_preedit = TextNormalizer::NormalizeText(preedit);
   // Copy before passing the value to FillConversionResultWithoutNormalization.
   // std::move() is evaluated out of order when used directly in the function
@@ -502,7 +511,7 @@ void FillPreeditResult(const absl::string_view preedit,
 }
 
 void FillCursorOffsetResult(int32_t cursor_offset,
-                            commands::Result *result_proto) {
+                            commands::Result* result_proto) {
   result_proto->set_cursor_offset(cursor_offset);
 }
 

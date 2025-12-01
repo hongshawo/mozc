@@ -27,25 +27,43 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef MOZC_REWRITER_ORDER_REWRITER_H_
-#define MOZC_REWRITER_ORDER_REWRITER_H_
+#ifndef MOZC_PREDICTION_SINGLE_KANJI_DECODER_H_
+#define MOZC_PREDICTION_SINGLE_KANJI_DECODER_H_
 
-#include "converter/segments.h"
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "absl/base/attributes.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "dictionary/pos_matcher.h"
+#include "dictionary/single_kanji_dictionary.h"
+#include "prediction/result.h"
 #include "request/conversion_request.h"
-#include "rewriter/rewriter_interface.h"
 
-namespace mozc {
+namespace mozc::prediction {
 
-class OrderRewriter : public RewriterInterface {
+class SingleKanjiDecoder {
  public:
-  OrderRewriter() = default;
-  ~OrderRewriter() override = default;
+  SingleKanjiDecoder(
+      const dictionary::PosMatcher& pos_matcher ABSL_ATTRIBUTE_LIFETIME_BOUND,
+      const dictionary::SingleKanjiDictionary& single_kanji_dictionary
+          ABSL_ATTRIBUTE_LIFETIME_BOUND);
+  virtual ~SingleKanjiDecoder();
 
-  int capability(const ConversionRequest &request) const override;
-  bool Rewrite(const ConversionRequest &request,
-               Segments *segments) const override;
+  virtual std::vector<Result> Decode(const ConversionRequest& request) const;
+
+ private:
+  void AppendResults(absl::string_view kanji_key,
+                     absl::string_view original_request_key,
+                     absl::Span<const std::string> kanji_list, int offset,
+                     std::vector<Result>* results) const;
+
+  const dictionary::SingleKanjiDictionary& single_kanji_dictionary_;
+  const uint16_t general_symbol_id_ = 0;
 };
 
-}  // namespace mozc
+}  // namespace mozc::prediction
 
-#endif  // MOZC_REWRITER_ORDER_REWRITER_H_
+#endif  // MOZC_PREDICTION_SINGLE_KANJI_DECODER_H_

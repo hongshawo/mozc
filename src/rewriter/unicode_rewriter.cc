@@ -44,6 +44,8 @@
 #include "absl/strings/string_view.h"
 #include "base/util.h"
 #include "composer/composer.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
 #include "converter/segments.h"
 #include "request/conversion_request.h"
 #include "rewriter/rewriter_interface.h"
@@ -66,20 +68,20 @@ bool IsValidCodepointExpression(const absl::string_view input) {
 
 // Converts given string to 32bit unsigned integer.
 bool UCS4ExpressionToInteger(const absl::string_view input,
-                             uint32_t *codepoint) {
+                             uint32_t* codepoint) {
   DCHECK(codepoint);
   return absl::SimpleHexAtoi(input.substr(2), codepoint);
 }
 
 void AddCandidate(absl::string_view key, absl::string_view value, int index,
-                  Segment *segment) {
+                  Segment* segment) {
   DCHECK(segment);
 
   if (index > segment->candidates_size()) {
     index = segment->candidates_size();
   }
 
-  Segment::Candidate *candidate = segment->insert_candidate(index);
+  converter::Candidate* candidate = segment->insert_candidate(index);
   DCHECK(candidate);
 
   segment->set_key(key);
@@ -90,9 +92,9 @@ void AddCandidate(absl::string_view key, absl::string_view value, int index,
   // NO_MODIFICATION is required here, in order to escape
   // EnvironmentalFilterRewriter. Otherwise, some candidates from
   // UnicodeRewriter will be removed because they are unrenderable.
-  candidate->attributes |= (Segment::Candidate::NO_LEARNING |
-                            Segment::Candidate::NO_VARIANTS_EXPANSION |
-                            Segment::Candidate::NO_MODIFICATION);
+  candidate->attributes |= (converter::Attribute::NO_LEARNING |
+                            converter::Attribute::NO_VARIANTS_EXPANSION |
+                            converter::Attribute::NO_MODIFICATION);
 }
 }  // namespace
 
@@ -100,7 +102,7 @@ void AddCandidate(absl::string_view key, absl::string_view value, int index,
 // Unicode "U+xxxx" format is added. (ex. "A" -> "U+0041").  This is
 // triggered on reverse conversion only.
 bool UnicodeRewriter::RewriteToUnicodeCharFormat(
-    const ConversionRequest &request, Segments *segments) const {
+    const ConversionRequest& request, Segments* segments) const {
   if (request.composer().source_text().empty() ||
       segments->conversion_segments_size() != 1) {
     return false;
@@ -117,7 +119,7 @@ bool UnicodeRewriter::RewriteToUnicodeCharFormat(
   std::string value = absl::StrFormat("U+%04X", codepoint);
 
   absl::string_view key = segments->conversion_segment(0).key();
-  Segment *segment = segments->mutable_conversion_segment(0);
+  Segment* segment = segments->mutable_conversion_segment(0);
   AddCandidate(key, value, 5, segment);
   return true;
 }
@@ -147,8 +149,8 @@ std::optional<std::string> GetValue(absl::string_view key) {
 }  // namespace
 
 std::optional<RewriterInterface::ResizeSegmentsRequest>
-UnicodeRewriter::CheckResizeSegmentsRequest(const ConversionRequest &request,
-                                            const Segments &segments) const {
+UnicodeRewriter::CheckResizeSegmentsRequest(const ConversionRequest& request,
+                                            const Segments& segments) const {
   if (segments.resized() || segments.conversion_segments_size() <= 1) {
     // The given segments are already resized.
     return std::nullopt;
@@ -176,7 +178,7 @@ UnicodeRewriter::CheckResizeSegmentsRequest(const ConversionRequest &request,
 // If the key is in the "U+xxxx" format, the corresponding Unicode
 // character is added. (ex. "U+0041" -> "A").
 bool UnicodeRewriter::RewriteFromUnicodeCharFormat(
-    const ConversionRequest &request, Segments *segments) const {
+    const ConversionRequest& request, Segments* segments) const {
   if (segments->conversion_segments_size() != 1) {
     return false;
   }
@@ -187,13 +189,13 @@ bool UnicodeRewriter::RewriteFromUnicodeCharFormat(
     return false;
   }
 
-  Segment *segment = segments->mutable_conversion_segment(0);
+  Segment* segment = segments->mutable_conversion_segment(0);
   AddCandidate(key, value.value(), 0, segment);
   return true;
 }
 
-bool UnicodeRewriter::Rewrite(const ConversionRequest &request,
-                              Segments *segments) const {
+bool UnicodeRewriter::Rewrite(const ConversionRequest& request,
+                              Segments* segments) const {
   DCHECK(segments);
   // "A" -> "U+0041" (Reverse conversion only).
   if (RewriteToUnicodeCharFormat(request, segments)) {

@@ -27,41 +27,40 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef MOZC_PREDICTION_PREDICTION_AGGREGATOR_INTERFACE_H_
-#define MOZC_PREDICTION_PREDICTION_AGGREGATOR_INTERFACE_H_
+#ifndef MOZC_WIN32_TIP_TIP_ENUM_CANDIDATES_H_
+#define MOZC_WIN32_TIP_TIP_ENUM_CANDIDATES_H_
 
+#include <ctffunc.h>
+
+#include <cstddef>
+#include <string>
+#include <utility>
 #include <vector>
 
-#include "prediction/result.h"
-#include "request/conversion_request.h"
+#include "absl/base/nullability.h"
+#include "win32/tip/tip_dll_module.h"
 
-namespace mozc {
-namespace prediction {
+namespace mozc::win32::tsf {
 
-class PredictionAggregatorInterface {
+class TipEnumCandidates : public TipComImplements<IEnumTfCandidates> {
  public:
-  PredictionAggregatorInterface(const PredictionAggregatorInterface &) = delete;
-  PredictionAggregatorInterface &operator=(
-      const PredictionAggregatorInterface &) = delete;
+  explicit TipEnumCandidates(std::vector<std::wstring> candidates)
+      : candidates_(std::move(candidates)) {}
 
-  virtual ~PredictionAggregatorInterface() = default;
+  STDMETHODIMP Clone(
+      IEnumTfCandidates** absl_nullable enum_candidates) override;
+  STDMETHODIMP Next(ULONG count,
+                    ITfCandidateString** absl_nullable candidate_string,
+                    ULONG* absl_nullable opt_fetched_count) override;
+  STDMETHODIMP Reset() override;
+  STDMETHODIMP Skip(ULONG count) override;
 
-  // Returns the prediction result entries for the `request` and `segments`.
-  virtual std::vector<Result> AggregateResults(
-      const ConversionRequest &request) const = 0;
-
-  // Returns the typing corrected result entries for the `request` and
-  // `segments`.
-  virtual std::vector<Result> AggregateTypingCorrectedResults(
-      const ConversionRequest &request) const {
-    return {};
-  }
-
- protected:
-  PredictionAggregatorInterface() = default;
+ private:
+  std::vector<std::wstring> candidates_;
+  // The index of the current candidate.
+  size_t current_ = 0;
 };
 
-}  // namespace prediction
-}  // namespace mozc
+}  // namespace mozc::win32::tsf
 
-#endif  // MOZC_PREDICTION_PREDICTION_AGGREGATOR_INTERFACE_H_
+#endif  // MOZC_WIN32_TIP_TIP_ENUM_CANDIDATES_H_

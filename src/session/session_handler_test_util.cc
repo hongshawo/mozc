@@ -37,7 +37,6 @@
 #include "base/file_util.h"
 #include "config/character_form_manager.h"
 #include "config/config_handler.h"
-#include "prediction/user_history_predictor.h"
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
 #include "session/session_handler.h"
@@ -57,7 +56,7 @@ using ::mozc::commands::Command;
 using ::mozc::config::CharacterFormManager;
 using ::mozc::config::ConfigHandler;
 
-bool CreateSession(SessionHandler *handler, uint64_t *id) {
+bool CreateSession(SessionHandler* handler, uint64_t* id) {
   Command command;
   command.mutable_input()->set_type(commands::Input::CREATE_SESSION);
   command.mutable_input()->mutable_capability()->set_text_deletion(
@@ -69,28 +68,28 @@ bool CreateSession(SessionHandler *handler, uint64_t *id) {
   return (command.output().error_code() == commands::Output::SESSION_SUCCESS);
 }
 
-bool DeleteSession(SessionHandler *handler, uint64_t id) {
+bool DeleteSession(SessionHandler* handler, uint64_t id) {
   Command command;
   command.mutable_input()->set_id(id);
   command.mutable_input()->set_type(commands::Input::DELETE_SESSION);
   return handler->EvalCommand(&command);
 }
 
-bool CleanUp(SessionHandler *handler, uint64_t id) {
+bool CleanUp(SessionHandler* handler, uint64_t id) {
   Command command;
   command.mutable_input()->set_id(id);
   command.mutable_input()->set_type(commands::Input::CLEANUP);
   return handler->EvalCommand(&command);
 }
 
-bool ClearUserPrediction(SessionHandler *handler, uint64_t id) {
+bool ClearUserPrediction(SessionHandler* handler, uint64_t id) {
   Command command;
   command.mutable_input()->set_id(id);
   command.mutable_input()->set_type(commands::Input::CLEAR_USER_PREDICTION);
   return handler->EvalCommand(&command);
 }
 
-bool IsGoodSession(SessionHandler *handler, uint64_t id) {
+bool IsGoodSession(SessionHandler* handler, uint64_t id) {
   Command command;
   command.mutable_input()->set_id(id);
   command.mutable_input()->set_type(commands::Input::SEND_KEY);
@@ -145,8 +144,6 @@ void SessionHandlerTestBase::ClearState() {
       ConfigFileStream::GetFileName("user://boundary.db"));
   FileUtil::UnlinkOrLogError(
       ConfigFileStream::GetFileName("user://segment.db"));
-  FileUtil::UnlinkOrLogError(
-      prediction::UserHistoryPredictor::GetUserHistoryFileName());
 }
 
 }  // namespace testing

@@ -45,8 +45,9 @@
 #include "base/number_util.h"
 #include "base/util.h"
 #include "base/vlog.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
 #include "converter/node.h"
-#include "converter/segments.h"
 #include "dictionary/dictionary_interface.h"
 #include "dictionary/pos_matcher.h"
 #include "prediction/suggestion_filter.h"
@@ -89,12 +90,13 @@ constexpr int kMinCost = 100;
 constexpr int kCostOffset = 6907;
 constexpr int kStructureCostOffset = 3453;
 constexpr int kMinStructureCostOffset = 1151;
-constexpr int32_t kStopEnmerationCacheSize = 30;
+constexpr int32_t kStopEnumerationCacheSize = 30;
 
 // Returns true if the given node sequence is noisy weak compound.
 // Please refer to the comment in FilterCandidateInternal for the idea.
-inline bool IsNoisyWeakCompound(const absl::Span<const Node *const> nodes,
-                                const dictionary::PosMatcher &pos_matcher) {
+inline bool IsNoisyWeakCompound(const absl::Span<const Node* const> nodes,
+                                const dictionary::PosMatcher& pos_matcher,
+                                const Candidate* candidate) {
   if (nodes.size() <= 1) {
     return false;
   }
@@ -104,20 +106,35 @@ inline bool IsNoisyWeakCompound(const absl::Span<const Node *const> nodes,
   }
   if (pos_matcher.IsWeakCompoundFillerPrefix(nodes[0]->lid)) {
     // Word that starts with 'filler' is always noisy.
+    MOZC_CANDIDATE_LOG(candidate, "Noise: Word that starts with 'filler'");
     return true;
   }
   if (nodes[1]->lid != nodes[1]->rid) {
-    // Some node +  COMPOUND node may be noisy.
-    return true;
+    // If the second node is a compound word (i.e. lid != rid),
+    // it is basically filtered.
+    // However, the second node is an anti_phrase word (e.g. とともに),
+    // the node is not filtered. Since there is no direct way
+    // to determine the anti_phrase word, we use the following heuristic.
+
+    const bool is_possible_anti_phrase_connection =
+        pos_matcher.IsContentNoun(nodes[0]->rid) &&
+        pos_matcher.IsAcceptableParticleAtBeginOfSegment(nodes[1]->lid);
+    if (!is_possible_anti_phrase_connection) {
+      // Some node +  COMPOUND node may be noisy.
+      MOZC_CANDIDATE_LOG(candidate, "Noise: Some node + COMPOUND node");
+      return true;
+    }
   }
   if (pos_matcher.IsWeakCompoundNounPrefix(nodes[0]->lid) &&
       !pos_matcher.IsWeakCompoundNounSuffix(nodes[1]->lid)) {
     // Noun prefix + not noun
+    MOZC_CANDIDATE_LOG(candidate, "Noise: Noun prefix + not noun");
     return true;
   }
   if (pos_matcher.IsWeakCompoundVerbPrefix(nodes[0]->lid) &&
       !pos_matcher.IsWeakCompoundVerbSuffix(nodes[1]->lid)) {
     // Verb prefix + not verb
+    MOZC_CANDIDATE_LOG(candidate, "Noise: Verb prefix + not verb");
     return true;
   }
   return false;
@@ -125,8 +142,9 @@ inline bool IsNoisyWeakCompound(const absl::Span<const Node *const> nodes,
 
 // Returns true if the given node sequence is connected weak compound.
 // Please refer to the comment in FilterCandidateInternal for the idea.
-inline bool IsConnectedWeakCompound(const absl::Span<const Node *const> nodes,
-                                    const dictionary::PosMatcher &pos_matcher) {
+inline bool IsConnectedWeakCompound(const absl::Span<const Node* const> nodes,
+                                    const dictionary::PosMatcher& pos_matcher,
+                                    const Candidate* candidate) {
   if (nodes.size() <= 1) {
     return false;
   }
@@ -137,26 +155,28 @@ inline bool IsConnectedWeakCompound(const absl::Span<const Node *const> nodes,
   if (pos_matcher.IsWeakCompoundNounPrefix(nodes[0]->lid) &&
       pos_matcher.IsWeakCompoundNounSuffix(nodes[1]->lid)) {
     // Noun prefix + noun
+    MOZC_CANDIDATE_LOG(candidate, "Connected: Noun prefix + noun");
     return true;
   }
   if (pos_matcher.IsWeakCompoundVerbPrefix(nodes[0]->lid) &&
       pos_matcher.IsWeakCompoundVerbSuffix(nodes[1]->lid)) {
     // Verb prefix + verb
+    MOZC_CANDIDATE_LOG(candidate, "Connected: Verb prefix + verb");
     return true;
   }
   return false;
 }
 
-bool IsIsolatedWordOrGeneralSymbol(const dictionary::PosMatcher &pos_matcher,
+bool IsIsolatedWordOrGeneralSymbol(const dictionary::PosMatcher& pos_matcher,
                                    uint16_t pos_id) {
   return pos_matcher.IsIsolatedWord(pos_id) ||
          pos_matcher.IsGeneralSymbol(pos_id);
 }
 
 bool ContainsIsolatedWordOrGeneralSymbol(
-    const dictionary::PosMatcher &pos_matcher,
-    const absl::Span<const Node *const> nodes) {
-  for (const Node *node : nodes) {
+    const dictionary::PosMatcher& pos_matcher,
+    const absl::Span<const Node* const> nodes) {
+  for (const Node* node : nodes) {
     if (IsIsolatedWordOrGeneralSymbol(pos_matcher, node->lid)) {
       return true;
     }
@@ -164,62 +184,19 @@ bool ContainsIsolatedWordOrGeneralSymbol(
   return false;
 }
 
-bool IsNormalOrConstrainedNode(const Node *node) {
+bool IsNormalOrConstrainedNode(const Node* node) {
   return node != nullptr && (node->node_type == Node::NOR_NODE ||
                              node->node_type == Node::CON_NODE);
 }
 
-bool IsCompoundCandidate(const absl::Span<const Node *const> nodes) {
+bool IsCompoundCandidate(const absl::Span<const Node* const> nodes) {
   return nodes.size() == 1 && nodes[0]->lid != nodes[0]->rid;
 }
 
-bool IsSuffixNode(const dictionary::PosMatcher &pos_matcher, const Node &node) {
-  return pos_matcher.IsSuffixWord(node.lid) &&
-         pos_matcher.IsSuffixWord(node.rid);
-}
-
-bool IsFunctionalNode(const dictionary::PosMatcher &pos_matcher,
-                      const Node &node) {
-  return pos_matcher.IsFunctional(node.lid) &&
-         pos_matcher.IsFunctional(node.rid);
-}
-
-// Returns true if the node structure is
-// content_word + suffix_word*N + (suffix_word|functional_word).
-// Example: "行き+ます", "山+が", etc.
-bool IsTypicalNodeStructure(const dictionary::PosMatcher &pos_matcher,
-                            const absl::Span<const Node *const> nodes) {
-  DCHECK_GT(nodes.size(), 1);
-  if (IsSuffixNode(pos_matcher, *nodes[0])) {
-    return false;
-  }
-  for (size_t i = 1; i < nodes.size() - 1; ++i) {
-    if (!IsSuffixNode(pos_matcher, *nodes[i])) {
-      return false;
-    }
-  }
-  return IsSuffixNode(pos_matcher, *nodes.back()) ||
-         IsFunctionalNode(pos_matcher, *nodes.back());
-}
-
-// Returns true if |lnodes| and |rnodes| have the same Pos structure.
-bool IsSameNodeStructure(const absl::Span<const Node *const> lnodes,
-                         const absl::Span<const Node *const> rnodes) {
-  if (lnodes.size() != rnodes.size()) {
-    return false;
-  }
-  for (int i = 0; i < lnodes.size(); ++i) {
-    if (lnodes[i]->lid != rnodes[i]->lid || lnodes[i]->rid != rnodes[i]->rid) {
-      return false;
-    }
-  }
-  return true;
-}
-
 // Returns true if there is a number node that does not follow the
-bool IsNoisyNumberCandidate(const dictionary::PosMatcher &pos_matcher,
-                            const absl::Span<const Node *const> nodes) {
-  auto is_converted_number = [&](const Node &node) {
+bool IsNoisyNumberCandidate(const dictionary::PosMatcher& pos_matcher,
+                            const absl::Span<const Node* const> nodes) {
+  auto is_converted_number = [&](const Node& node) {
     if (node.lid != node.rid) {
       return false;
     }
@@ -248,12 +225,13 @@ bool IsNoisyNumberCandidate(const dictionary::PosMatcher &pos_matcher,
 
 }  // namespace
 
-CandidateFilter::CandidateFilter(const UserDictionaryInterface &user_dictionary,
-                                 const PosMatcher &pos_matcher,
-                                 const SuggestionFilter &suggestion_filter)
+CandidateFilter::CandidateFilter(const UserDictionaryInterface& user_dictionary,
+                                 const PosMatcher& pos_matcher,
+                                 const SuggestionFilter& suggestion_filter)
     : user_dictionary_(user_dictionary),
       pos_matcher_(pos_matcher),
       suggestion_filter_(suggestion_filter),
+      has_suppressed_entries_(user_dictionary_.HasSuppressedEntries()),
       top_candidate_(nullptr) {}
 
 void CandidateFilter::Reset() {
@@ -262,9 +240,9 @@ void CandidateFilter::Reset() {
 }
 
 CandidateFilter::ResultType CandidateFilter::CheckRequestType(
-    const ConversionRequest &request, const absl::string_view original_key,
-    const Segment::Candidate &candidate,
-    const absl::Span<const Node *const> nodes) const {
+    const ConversionRequest& request, const absl::string_view original_key,
+    const Candidate& candidate,
+    const absl::Span<const Node* const> nodes) const {
   // Filtering by the suggestion filter, which is applied only for the
   // PREDICTION and SUGGESTION modes.
   switch (request.request_type()) {
@@ -320,10 +298,9 @@ CandidateFilter::ResultType CandidateFilter::CheckRequestType(
 }
 
 CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
-    const ConversionRequest &request, const absl::string_view original_key,
-    const Segment::Candidate *candidate,
-    const absl::Span<const Node *const> top_nodes,
-    const absl::Span<const Node *const> nodes) {
+    const ConversionRequest& request, const absl::string_view original_key,
+    const Candidate* candidate, const absl::Span<const Node* const> top_nodes,
+    const absl::Span<const Node* const> nodes) {
   DCHECK(candidate);
 
   if (ResultType result =
@@ -336,7 +313,7 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
   // If the top candidate has constrained node, we skip the main body
   // of CandidateFilter, meaning that the node is not treated as the top
   // node for CandidateFilter.
-  if (candidate->attributes & Segment::Candidate::CONTEXT_SENSITIVE) {
+  if (candidate->attributes & Attribute::CONTEXT_SENSITIVE) {
     return CandidateFilter::GOOD_CANDIDATE;
   }
 
@@ -370,17 +347,18 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
   }
 
   // Remove "抑制単語" just in case.
-  if (user_dictionary_.IsSuppressedEntry(candidate->key, candidate->value) ||
-      (candidate->key != candidate->content_key &&
-       candidate->value != candidate->content_value &&
-       user_dictionary_.IsSuppressedEntry(candidate->content_key,
-                                          candidate->content_value))) {
+  if (has_suppressed_entries_ &&
+      (user_dictionary_.IsSuppressedEntry(candidate->key, candidate->value) ||
+       (candidate->key != candidate->content_key &&
+        candidate->value != candidate->content_value &&
+        user_dictionary_.IsSuppressedEntry(candidate->content_key,
+                                           candidate->content_value)))) {
     MOZC_CANDIDATE_LOG(candidate, "SuppressEntry");
     return CandidateFilter::BAD_CANDIDATE;
   }
 
   // Don't remove duplications if USER_DICTIONARY.
-  if (candidate->attributes & Segment::Candidate::USER_DICTIONARY) {
+  if (candidate->attributes & Attribute::USER_DICTIONARY) {
     return CandidateFilter::GOOD_CANDIDATE;
   }
 
@@ -463,9 +441,10 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
   //   - We do not allow noisy weak compound except for the top result. Even for
   //     the top result, we will check other conditions for filtering.
   //   - We do not allow connected weak compound if the rank is low enough.
-  const bool is_noisy_weak_compound = IsNoisyWeakCompound(nodes, pos_matcher_);
+  const bool is_noisy_weak_compound =
+      IsNoisyWeakCompound(nodes, pos_matcher_, candidate);
   const bool is_connected_weak_compound =
-      IsConnectedWeakCompound(nodes, pos_matcher_);
+      IsConnectedWeakCompound(nodes, pos_matcher_, candidate);
 
   if (is_noisy_weak_compound && candidate_size >= 1) {
     MOZC_CANDIDATE_LOG(candidate, "is_noisy_weak_compound");
@@ -510,7 +489,7 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
   // Skip this check when the conversion mode is real-time;
   // otherwise this ruins the whole sentence
   // that starts with alphabets.
-  if (!(candidate->attributes & Segment::Candidate::REALTIME_CONVERSION)) {
+  if (!(candidate->attributes & Attribute::REALTIME_CONVERSION)) {
     const bool is_top_english_t13n =
         (Util::GetScriptType(nodes[0]->key) == Util::HIRAGANA &&
          Util::IsEnglishTransliteration(nodes[0]->value));
@@ -567,7 +546,7 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
                  << " top_structure_cost=" << top_structure_cost
                  << " structure_cost=" << candidate->structure_cost
                  << " lid=" << candidate->lid << " rid=" << candidate->rid;
-    if (candidate_size < kStopEnmerationCacheSize) {
+    if (candidate_size < kStopEnumerationCacheSize) {
       // Even when the current candidate is classified as bad candidate,
       // we don't return STOP_ENUMERATION here.
       // When the current candidate is removed only with the "structure_cost",
@@ -608,7 +587,7 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
   if (nodes.size() >= 2) {
     int number_nodes = 0;
     uint16_t prev_lid = 0;
-    for (const auto &node : nodes) {
+    for (const auto& node : nodes) {
       if (Util::IsScriptType(node->key, Util::NUMBER)) {
         continue;
       }
@@ -637,10 +616,9 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
 }
 
 CandidateFilter::ResultType CandidateFilter::FilterCandidate(
-    const ConversionRequest &request, const absl::string_view original_key,
-    const Segment::Candidate *candidate,
-    const absl::Span<const Node *const> top_nodes,
-    const absl::Span<const Node *const> nodes) {
+    const ConversionRequest& request, const absl::string_view original_key,
+    const Candidate* candidate, const absl::Span<const Node* const> top_nodes,
+    const absl::Span<const Node* const> nodes) {
   if (request.request_type() == ConversionRequest::REVERSE_CONVERSION) {
     // In reverse conversion, only remove duplicates because the filtering
     // criteria of FilterCandidateInternal() are completely designed for

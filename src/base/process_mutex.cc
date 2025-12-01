@@ -78,7 +78,7 @@ ProcessMutex::~ProcessMutex() { UnLock(); }
 bool ProcessMutex::Lock() { return LockAndWrite(""); }
 
 bool ProcessMutex::LockAndWrite(absl::string_view message) {
-  absl::MutexLock l(&mutex_);
+  absl::MutexLock l(mutex_);
   if (locked_) {
     MOZC_VLOG(1) << filename_ << " is already locked";
     return false;
@@ -89,7 +89,7 @@ bool ProcessMutex::LockAndWrite(absl::string_view message) {
 
 // always return true at this moment.
 bool ProcessMutex::UnLock() {
-  absl::MutexLock l(&mutex_);
+  absl::MutexLock l(mutex_);
   if (!locked_) {
     MOZC_VLOG(1) << filename_ << " is not locked";
     return true;
@@ -107,15 +107,19 @@ bool ProcessMutex::LockAndWriteInternal(const absl::string_view message) {
       FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_TEMPORARY |
       FILE_ATTRIBUTE_NOT_CONTENT_INDEXED | FILE_FLAG_DELETE_ON_CLOSE;
 
-  SECURITY_ATTRIBUTES serucity_attributes = {};
-  if (!WinSandbox::MakeSecurityAttributes(WinSandbox::kSharableFileForRead,
-                                          &serucity_attributes)) {
+  wil::unique_hlocal_security_descriptor security_descriptor =
+       WinSandbox::MakeSecurityDescriptor(WinSandbox::kSharableFileForRead);
+  if (!security_descriptor) {
     return false;
   }
+  SECURITY_ATTRIBUTES security_attributes = {
+      .nLength = sizeof(SECURITY_ATTRIBUTES),
+      .lpSecurityDescriptor = security_descriptor.get(),
+      .bInheritHandle = FALSE,
+  };
   handle_.reset(::CreateFileW(wfilename.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
-                              &serucity_attributes, CREATE_ALWAYS, kAttribute,
+                              &security_attributes, CREATE_ALWAYS, kAttribute,
                               nullptr));
-  ::LocalFree(serucity_attributes.lpSecurityDescriptor);
 
   if (!handle_.is_valid()) {
     MOZC_VLOG(1) << "already locked";
@@ -170,7 +174,7 @@ namespace {
 class FileLockManager {
  public:
   absl::StatusOr<int> Lock(const zstring_view filename) {
-    absl::MutexLock l(&mutex_);
+    absl::MutexLock l(mutex_);
 
     if (filename.empty()) {
       return absl::InvalidArgumentError("filename is empty");
@@ -204,8 +208,8 @@ class FileLockManager {
     return fd;
   }
 
-  absl::Status UnLock(const std::string &filename) {
-    absl::MutexLock l(&mutex_);
+  absl::Status UnLock(const std::string& filename) {
+    absl::MutexLock l(mutex_);
     auto node = fdmap_.extract(filename);
     if (node.empty()) {
       return absl::FailedPreconditionError(
@@ -219,7 +223,7 @@ class FileLockManager {
   FileLockManager() = default;
 
   ~FileLockManager() {
-    for (const auto &[filename, fd] : fdmap_) {
+    for (const auto& [filename, fd] : fdmap_) {
       ::close(fd);
     }
   }

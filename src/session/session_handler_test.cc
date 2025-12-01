@@ -34,7 +34,6 @@
 #include <cstdint>
 #include <iterator>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -48,7 +47,6 @@
 #include "absl/time/time.h"
 #include "base/clock.h"
 #include "base/clock_mock.h"
-#include "composer/query.h"
 #include "config/config_handler.h"
 #include "data_manager/data_manager.h"
 #include "data_manager/testing/mock_data_manager.h"
@@ -56,7 +54,6 @@
 #include "engine/engine_interface.h"
 #include "engine/engine_mock.h"
 #include "engine/mock_data_engine_factory.h"
-#include "engine/modules.h"
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
 #include "session/keymap.h"
@@ -76,7 +73,7 @@ namespace mozc {
 
 class KeyMapManagerAccessorTestPeer : public testing::TestPeer<SessionHandler> {
  public:
-  explicit KeyMapManagerAccessorTestPeer(SessionHandler &handler)
+  explicit KeyMapManagerAccessorTestPeer(SessionHandler& handler)
       : testing::TestPeer<SessionHandler>(handler) {}
 
   PEER_VARIABLE(key_map_manager_);
@@ -88,7 +85,7 @@ using ::mozc::session::testing::SessionHandlerTestBase;
 using ::testing::Return;
 
 EngineReloadResponse::Status SendMockEngineReloadRequest(
-    SessionHandler &handler, const EngineReloadRequest &request) {
+    SessionHandler& handler, const EngineReloadRequest& request) {
   commands::Command command;
   command.mutable_input()->set_type(
       commands::Input::SEND_ENGINE_RELOAD_REQUEST);
@@ -97,7 +94,7 @@ EngineReloadResponse::Status SendMockEngineReloadRequest(
   return command.output().engine_reload_response().status();
 }
 
-bool CreateSession(SessionHandler &handler, uint64_t *id) {
+bool CreateSession(SessionHandler& handler, uint64_t* id) {
   commands::Command command;
   command.mutable_input()->set_type(commands::Input::CREATE_SESSION);
   command.mutable_input()->mutable_capability()->set_text_deletion(
@@ -109,21 +106,21 @@ bool CreateSession(SessionHandler &handler, uint64_t *id) {
   return (command.output().error_code() == commands::Output::SESSION_SUCCESS);
 }
 
-bool DeleteSession(SessionHandler &handler, uint64_t id) {
+bool DeleteSession(SessionHandler& handler, uint64_t id) {
   commands::Command command;
   command.mutable_input()->set_id(id);
   command.mutable_input()->set_type(commands::Input::DELETE_SESSION);
   return handler.EvalCommand(&command);
 }
 
-bool CleanUp(SessionHandler &handler, uint64_t id) {
+bool CleanUp(SessionHandler& handler, uint64_t id) {
   commands::Command command;
   command.mutable_input()->set_id(id);
   command.mutable_input()->set_type(commands::Input::CLEANUP);
   return handler.EvalCommand(&command);
 }
 
-bool IsGoodSession(SessionHandler &handler, uint64_t id) {
+bool IsGoodSession(SessionHandler& handler, uint64_t id) {
   commands::Command command;
   command.mutable_input()->set_id(id);
   command.mutable_input()->set_type(commands::Input::SEND_KEY);
@@ -142,23 +139,19 @@ class SessionHandlerTest : public SessionHandlerTestBase {
   SessionHandlerTest() {
     const std::string mock_path =
         testing::GetSourcePath({"data_manager", "testing", "mock_mozc.data"});
-    mock_request_.set_engine_type(EngineReloadRequest::MOBILE);
     mock_request_.set_file_path(mock_path);
     mock_request_.set_magic_number(kMockMagicNumber);
 
     const std::string oss_path =
         testing::GetSourcePath({"data_manager", "oss", "mozc.data"});
-    oss_request_.set_engine_type(EngineReloadRequest::MOBILE);
     oss_request_.set_file_path(oss_path);
     oss_request_.set_magic_number(kOssMagicNumber);
 
     const std::string invalid_path =
         testing::GetSourcePath({"data_manager", "invalid", "mozc.data"});
-    invalid_path_request_.set_engine_type(EngineReloadRequest::MOBILE);
     invalid_path_request_.set_file_path(invalid_path);
     invalid_path_request_.set_magic_number(kOssMagicNumber);
 
-    invalid_data_request_.set_engine_type(EngineReloadRequest::MOBILE);
     invalid_data_request_.set_file_path(mock_path);
     invalid_data_request_.set_magic_number(kOssMagicNumber);
 
@@ -185,6 +178,15 @@ class SessionHandlerTest : public SessionHandlerTestBase {
   void TearDown() override {
     Clock::SetClockForUnitTest(nullptr);
     SessionHandlerTestBase::TearDown();
+  }
+
+  void ClearState() override {
+    if (handler_) {
+      commands::Command command;
+      command.mutable_input()->set_type(commands::Input::CLEAR_USER_PREDICTION);
+      handler_->EvalCommand(&command);
+    }
+    SessionHandlerTestBase::ClearState();
   }
 
   static std::unique_ptr<Engine> CreateMockDataEngine() {
@@ -285,7 +287,7 @@ TEST_F(SessionHandlerTest, CreateSession_ConfigTest) {
     // Move to PRECOMPOSITION mode.
     // On Windows, its initial mode is DIRECT.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SEND_KEY);
     input->mutable_key()->set_special_key(commands::KeyEvent::ON);
@@ -295,7 +297,7 @@ TEST_F(SessionHandlerTest, CreateSession_ConfigTest) {
     // Check if the config in ConfigHandler is respected
     // even without SET_CONFIG command.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SEND_KEY);
     input->mutable_key()->set_special_key(commands::KeyEvent::F7);
@@ -395,7 +397,7 @@ TEST_F(SessionHandlerTest, ShutdownTest) {
 
   {
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SHUTDOWN);
     // EvalCommand returns false since the session no longer exists.
@@ -405,7 +407,7 @@ TEST_F(SessionHandlerTest, ShutdownTest) {
 
   {  // Any command should be rejected after shutdown.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::NO_OPERATION);
     EXPECT_FALSE(handler.EvalCommand(&command));
@@ -420,7 +422,7 @@ TEST_F(SessionHandlerTest, ClearHistoryTest) {
 
   {
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::CLEAR_USER_HISTORY);
     EXPECT_TRUE(handler.EvalCommand(&command));
@@ -429,7 +431,7 @@ TEST_F(SessionHandlerTest, ClearHistoryTest) {
 
   {
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::CLEAR_USER_PREDICTION);
     EXPECT_TRUE(handler.EvalCommand(&command));
@@ -438,7 +440,7 @@ TEST_F(SessionHandlerTest, ClearHistoryTest) {
 
   {
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::CLEAR_UNUSED_USER_PREDICTION);
     EXPECT_TRUE(handler.EvalCommand(&command));
@@ -464,7 +466,7 @@ TEST_F(SessionHandlerTest, ConfigTest) {
   {
     // Set KOTOERI keymap
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_type(commands::Input::SET_CONFIG);
     config.set_session_keymap(config::Config::KOTOERI);
     *input->mutable_config() = config;
@@ -480,7 +482,7 @@ TEST_F(SessionHandlerTest, ConfigTest) {
     // Move to PRECOMPOSITION mode.
     // On Windows, its initial mode is DIRECT.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SEND_KEY);
     input->mutable_key()->set_special_key(commands::KeyEvent::ON);
@@ -490,7 +492,7 @@ TEST_F(SessionHandlerTest, ConfigTest) {
     // KOTOERI doesn't assign anything to ctrl+shift+space (precomposition) so
     // SEND_KEY shouldn't consume it.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SEND_KEY);
     input->mutable_key()->set_special_key(commands::KeyEvent::SPACE);
@@ -503,7 +505,7 @@ TEST_F(SessionHandlerTest, ConfigTest) {
     // Set ATOK keymap
     // The existing Session should apply it immediately.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SET_CONFIG);
     config.set_session_keymap(config::Config::ATOK);
@@ -517,7 +519,7 @@ TEST_F(SessionHandlerTest, ConfigTest) {
     // ATOK assigns a function to ctrl+f7 (precomposition) (KOTOERI doesn't) so
     // TEST_SEND_KEY should consume it.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SEND_KEY);
     input->mutable_key()->set_special_key(commands::KeyEvent::F7);
@@ -539,7 +541,7 @@ TEST_F(SessionHandlerTest, UpdateComposition) {
     // Move to PRECOMPOSITION mode.
     // On Windows, its initial mode is DIRECT.
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SEND_KEY);
     input->mutable_key()->set_special_key(commands::KeyEvent::ON);
@@ -547,12 +549,12 @@ TEST_F(SessionHandlerTest, UpdateComposition) {
   }
   {
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SEND_COMMAND);
     input->mutable_command()->set_type(
         commands::SessionCommand::UPDATE_COMPOSITION);
-    commands::SessionCommand::CompositionEvent *composition_event =
+    commands::SessionCommand::CompositionEvent* composition_event =
         input->mutable_command()->add_composition_events();
     composition_event->set_composition_string("かん字");
     composition_event->set_probability(1.0);
@@ -564,7 +566,7 @@ TEST_F(SessionHandlerTest, UpdateComposition) {
 
 TEST_F(SessionHandlerTest, KeyMapTest) {
   config::Config config = config::ConfigHandler::GetCopiedConfig();
-  const keymap::KeyMapManager *msime_keymap;
+  const keymap::KeyMapManager* msime_keymap;
 
   SessionHandler handler(CreateMockDataEngine());
 
@@ -573,7 +575,7 @@ TEST_F(SessionHandlerTest, KeyMapTest) {
 
   {
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SET_CONFIG);
     input->mutable_config()->set_session_keymap(config::Config::MSIME);
@@ -583,7 +585,7 @@ TEST_F(SessionHandlerTest, KeyMapTest) {
   }
   {
     commands::Command command;
-    commands::Input *input = command.mutable_input();
+    commands::Input* input = command.mutable_input();
     input->set_id(session_id);
     input->set_type(commands::Input::SET_CONFIG);
     input->mutable_config()->set_session_keymap(config::Config::KOTOERI);
@@ -736,7 +738,7 @@ TEST_F(SessionHandlerTest, EngineRollbackDataTest) {
 TEST_F(SessionHandlerTest, EngineReloadSessionExistsTest) {
   const absl::string_view initial_version = handler_->engine().GetDataVersion();
 
-  const EngineInterface *old_engine_ptr = &(handler_->engine());
+  const EngineInterface* old_engine_ptr = &(handler_->engine());
 
   // As a session is created before data is loaded, engine is not reloaded yet.
   uint64_t id1 = 0;

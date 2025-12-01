@@ -5,7 +5,8 @@ name: CI for Android
 # on: push
 on: workflow_dispatch
 
-permissions: read-all
+permissions:
+  contents: read
 
 # Prevent previous workflows from running.
 concurrency:
@@ -20,9 +21,10 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: setup
         run: |
@@ -53,15 +55,16 @@ jobs:
           if-no-files-found: warn
 
   build_on_mac:
-    # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md
-    runs-on: macos-14
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+    runs-on: macos-15
     timeout-minutes: 60
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Try to restore update_deps cache
         uses: actions/cache@v4

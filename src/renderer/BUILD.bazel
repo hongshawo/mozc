@@ -49,7 +49,6 @@ mozc_cc_library(
     srcs = ["renderer_client.cc"],
     hdrs = ["renderer_client.h"],
     visibility = [
-        "//client:__pkg__",
         "//gui:__subpackages__",
         "//mac:__pkg__",
         "//renderer:__subpackages__",
@@ -78,7 +77,6 @@ mozc_cc_library(
         macos = ["//base/mac:mac_util"],
         windows = [
             "//base/win32:win_sandbox",
-            "//base:run_level",
         ],
     ),
 )

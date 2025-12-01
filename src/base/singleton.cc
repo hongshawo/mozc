@@ -41,14 +41,13 @@ namespace internal {
 namespace {
 
 constinit absl::Mutex mu(absl::kConstInit);
-constinit std::array<void (*)(void), 256> finalizers
-    ABSL_GUARDED_BY(mu) = {};
+constinit std::array<void (*)(void), 256> finalizers ABSL_GUARDED_BY(mu) = {};
 constinit int size ABSL_GUARDED_BY(mu) = 0;
 
 }  // namespace
 
 void AddSingletonFinalizer(void (*finalizer)()) ABSL_LOCKS_EXCLUDED(mu) {
-  absl::MutexLock lock(&mu);
+  absl::MutexLock lock(mu);
   if (size >= finalizers.size()) {
     LOG(FATAL) << "Too many singletons";
   }
@@ -58,7 +57,7 @@ void AddSingletonFinalizer(void (*finalizer)()) ABSL_LOCKS_EXCLUDED(mu) {
 }  // namespace internal
 
 void FinalizeSingletons() ABSL_LOCKS_EXCLUDED(internal::mu) {
-  absl::MutexLock lock(&internal::mu);
+  absl::MutexLock lock(internal::mu);
   for (auto func : internal::finalizers) {
     func();
   }

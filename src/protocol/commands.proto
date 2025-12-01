@@ -546,14 +546,12 @@ message Capability {
       [default = NO_TEXT_DELETION_CAPABILITY];
 }
 
-// Next ID: 108
+// Next ID: 134
 // Bundles together some Android experiment flags so that they can be easily
 // retrieved throughout the native code.  These flags are generally specific to
 // the decoder, and are made available when the decoder is initialized.
 message DecoderExperimentParams {
   reserved 1;
-
-  optional int32 mobile_history_prediction_size = 2;
 
   enum VariationCharacterType {
     NO_VARIATION = 0;
@@ -586,9 +584,6 @@ message DecoderExperimentParams {
 
   optional bool disable_zero_query_suffix_prediction = 36 [default = false];
 
-  optional bool enable_findability_oriented_order = 42 [default = false];
-  optional int32 findability_oriented_order_top_size = 43 [default = 10];
-
   // Changes the size of history with character coverage.
   optional int32 user_history_prediction_max_char_coverage = 82 [default = 0];
 
@@ -607,6 +602,7 @@ message DecoderExperimentParams {
   // - " google"
   optional int32 english_variation_space_insertion_mode = 55 [default = 0];
 
+
   optional int32 candidate_consistency_cost_max_diff = 63 [default = 0];
 
   optional int32 max_composition_event_to_process = 64 [default = 2];
@@ -619,9 +615,6 @@ message DecoderExperimentParams {
   // default_value: 10*log(500)
   optional int32 handwriting_conversion_candidate_cost_offset = 102
       [default = 1151];
-
-  // Apply inner segment boundary information to the single segment candidate.
-  optional bool apply_single_inner_segment_boundary = 105 [default = true];
 
   enum BigramNwpFilteringMode {
     // Control implementation is used. For example,
@@ -636,20 +629,39 @@ message DecoderExperimentParams {
     // Filter all bigram candidates.
     FILTER_ALL = 2;
   }
-  optional int32 bigram_nwp_filtering_mode = 106 [default = 0];
 
   // Threshold for suffix NWP transition cost.
   // If the transition cost is greater than this value, the candidate will be
   // filtered.
   // The candidate will not be filtered if this value is zero.
   optional int32 suffix_nwp_transition_cost_threshold = 107 [default = 0];
+
+  // Suppress the prediction when value_len >= suppress_min_length
+  // and suggestion frequency is one.
+  // If user_history_suppress_min_length <= 0, this suppression is disabled.
+  // This parameter is only used in mixed conversion mode.
+  optional int32 user_history_suppress_min_length = 130 [default = 0];
+
+  // Demotes the partial candidates so that the top_n results must
+  // be non-partial candidates.
+  optional int32 demote_partial_candidate_top_n = 126 [default = 0];
+  // Maximum length of partial candidates. When 1, only demote
+  // single-value candidates.
+  optional int32 demote_partial_candidate_max_length = 127 [default = 0];
+
+  // Position of the first symbol rewriter candidate (0-origin).
+  optional int32 symbol_rewriter_candidate_position = 132 [default = 3];
+  // Number of candidates to be promoted.
+  // For example, if symbol_rewriter_candidate_position == 0, and
+  // symbol_rewriter_promotion_size == 5, the first 5 candidates are symbols.
+  optional int32 symbol_rewriter_promotion_size = 133 [default = 15];
 }
 
 // Clients' request to the server.
 // Users cannot modify this.
 // In the future each request may be able to be overwritten by Config.
 // The server does not have to obey this request.
-// Next ID: 24
+// Next ID: 25
 message Request {
   // Enable zero query suggestion.
   optional bool zero_query_suggestion = 1
@@ -897,7 +909,7 @@ message Request {
   // necessarily mutually exclusive. However, the current implementation in
   // NormalizationRewriter assumes they are mutually exclusive.
   // LINT.IfChange
-  // Next ID: 14
+  // Next ID: 15
   enum AdditionalRenderableCharacterGroup {
     // Do not use this case. This case is reserved for future usage.
     // Because 0th element in enum is used as default value, in order to prevend
@@ -936,6 +948,8 @@ message Request {
     EMOJI_15_1 = 12;
     // Emoji 16.0, released September 2024
     EMOJI_16_0 = 13;
+    // Emoji 17.0, released Octorber 2025
+    EMOJI_17_0 = 14;
 
     // Additional Hieroglyphs (U+13000 ~ U+1342E)
     // Unicode 5.2, released October 2009
@@ -967,6 +981,14 @@ message Request {
   // Clients needs to check ConversionRequest::incognito_mode() instead of
   // this value directly, as the incognito mode can be set in other ways.
   optional bool is_incognito_mode = 23 [default = false];
+
+  // Whether the client can accept display_value attribute.
+  enum DisplayValueCapability {
+    NOT_SUPPORTED = 0;
+    PLAIN_TEXT = 1;
+  }
+  optional DisplayValueCapability display_value_capability = 24
+      [default = NOT_SUPPORTED];
 }
 
 // Note there is another ApplicationInfo inside RendererCommand.

@@ -41,12 +41,8 @@ class ImmutableConverterInterface {
  public:
   virtual ~ImmutableConverterInterface() = default;
 
-  // This method should be pure-virtual method in theory.
-  // However, to keep the backward compatibility until the deprecation of
-  // Conversion method, we provide the default implementation.
-  // Please see the .cc file.
-  [[nodiscard]] virtual bool ConvertForRequest(
-      const ConversionRequest &request, Segments *segments) const = 0;
+  [[nodiscard]] virtual bool Convert(const ConversionRequest& request,
+                                     Segments* segments) const = 0;
 
  protected:
   ImmutableConverterInterface() = default;

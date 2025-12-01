@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "absl/strings/string_view.h"
+#include "converter/candidate.h"
 #include "converter/segments.h"
 #include "dictionary/pos_matcher.h"
 #include "rewriter/rewriter_interface.h"
@@ -47,22 +48,22 @@ class EnglishVariantsRewriter : public RewriterInterface {
       : pos_matcher_(pos_matcher) {}
   ~EnglishVariantsRewriter() override = default;
 
-  int capability(const ConversionRequest &request) const override;
+  int capability(const ConversionRequest& request) const override;
 
-  bool Rewrite(const ConversionRequest &request,
-               Segments *segments) const override;
+  bool Rewrite(const ConversionRequest& request,
+               Segments* segments) const override;
 
  private:
   friend class EnglishVariantsRewriterTestPeer;
 
-  bool IsT13NCandidate(Segment::Candidate *candidate) const;
-  bool IsEnglishCandidate(Segment::Candidate *candidate) const;
+  bool IsT13NCandidate(converter::Candidate* candidate) const;
+  bool IsEnglishCandidate(converter::Candidate* candidate) const;
   bool ExpandEnglishVariants(absl::string_view input,
-                             std::vector<std::string> *variants) const;
+                             std::vector<std::string>* variants) const;
   bool ExpandSpacePrefixedVariants(absl::string_view input,
-                                   std::vector<std::string> *variants) const;
+                                   std::vector<std::string>* variants) const;
   bool ExpandEnglishVariantsWithSegment(bool need_space_prefix,
-                                        Segment *seg) const;
+                                        Segment* seg) const;
 
   const dictionary::PosMatcher pos_matcher_;
 };

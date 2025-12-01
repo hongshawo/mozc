@@ -34,25 +34,20 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
-#include "absl/base/attributes.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "base/thread.h"
 #include "converter/connector.h"
-#include "converter/converter_interface.h"
-#include "converter/immutable_converter_interface.h"
 #include "converter/segmenter.h"
 #include "dictionary/pos_matcher.h"
-#include "dictionary/single_kanji_dictionary.h"
 #include "engine/modules.h"
-#include "prediction/prediction_aggregator_interface.h"
+#include "prediction/dictionary_prediction_aggregator.h"
 #include "prediction/predictor_interface.h"
+#include "prediction/realtime_decoder.h"
 #include "prediction/result.h"
 #include "prediction/suggestion_filter.h"
 #include "request/conversion_request.h"
@@ -62,25 +57,18 @@ namespace mozc::prediction {
 // Dictionary-based predictor
 class DictionaryPredictor : public PredictorInterface {
  public:
-  // Cost penalty 1151 means that expanded candidates are evaluated
-  // 10 times smaller in frequency.
-  // Note that the cost is calcurated by cost = -500 * log(prob)
-  // 1151 = 500 * log(10)
-  static constexpr int kKeyExpansionPenalty = 1151;
-
   // Initializes a predictor with given references to submodules. Note that
   // pointers are not owned by the class and to be deleted by the caller.
-  DictionaryPredictor(const engine::Modules &modules,
-                      const ConverterInterface &converter,
-                      const ImmutableConverterInterface &immutable_converter);
+  DictionaryPredictor(const engine::Modules& modules,
+                      std::unique_ptr<const RealtimeDecoder> decoder);
 
-  DictionaryPredictor(const DictionaryPredictor &) = delete;
-  DictionaryPredictor &operator=(const DictionaryPredictor &) = delete;
+  DictionaryPredictor(const DictionaryPredictor&) = delete;
+  DictionaryPredictor& operator=(const DictionaryPredictor&) = delete;
 
-  std::vector<Result> Predict(const ConversionRequest &request) const override;
+  std::vector<Result> Predict(const ConversionRequest& request) const override;
 
   absl::string_view GetPredictorName() const override {
-    return predictor_name_;
+    return "DictionaryPredictor";
   }
 
  private:
@@ -88,75 +76,22 @@ class DictionaryPredictor : public PredictorInterface {
   friend class DictionaryPredictorTestPeer;
   friend class MockDataAndPredictor;
 
-  class ResultFilter {
-   public:
-    ResultFilter(const ConversionRequest &request,
-                 dictionary::PosMatcher pos_matcher,
-                 const Connector &connector ABSL_ATTRIBUTE_LIFETIME_BOUND,
-                 const SuggestionFilter &suggestion_filter
-                     ABSL_ATTRIBUTE_LIFETIME_BOUND);
-    bool ShouldRemove(const Result &result, int added_num,
-                      std::string *log_message);
-
-   private:
-    bool CheckDupAndReturn(absl::string_view value, const Result &result,
-                           std::string *log_message);
-
-    const std::string input_key_;
-    const std::string history_key_;
-    const std::string history_value_;
-    const size_t input_key_len_;
-    const dictionary::PosMatcher pos_matcher_;
-    const Connector &connector_;
-    const SuggestionFilter &suggestion_filter_;
-    const bool is_mixed_conversion_;
-    const bool auto_partial_suggestion_;
-    const bool include_exact_key_;
-    const bool is_handwriting_;
-    const int suffix_nwp_transition_cost_threshold_;
-    const int history_rid_ = 0;
-
-    int suffix_count_ = 0;
-    int predictive_count_ = 0;
-    int realtime_count_ = 0;
-    int prefix_tc_count_ = 0;
-    int tc_count_ = 0;
-
-    // Seen set for dup value check.
-    absl::flat_hash_set<std::string> seen_;
-  };
-
   // pair: <rid, key_length>
   using PrefixPenaltyKey = std::pair<uint16_t, int16_t>;
 
   // Constructor for testing
   DictionaryPredictor(
-      std::string predictor_name, const engine::Modules &modules,
-      std::unique_ptr<const prediction::PredictionAggregatorInterface>
-          aggregator,
-      const ImmutableConverterInterface &immutable_converter);
+      const engine::Modules& modules,
+      std::unique_ptr<const DictionaryPredictionAggregatorInterface> aggregator,
+      std::unique_ptr<const RealtimeDecoder> decoder);
 
-  std::vector<Result> RerankAndFilterResults(const ConversionRequest &request,
+  std::vector<Result> RerankAndFilterResults(const ConversionRequest& request,
                                              std::vector<Result> result) const;
-
-  // Returns the position of misspelled character position.
-  //
-  // Example:
-  // key: "れみおめろん"
-  // value: "レミオロメン"
-  // returns 3
-  //
-  // Example:
-  // key: "ろっぽんぎ"
-  // value: "六本木"
-  // returns 5 (charslen("ろっぽんぎ"))
-  static size_t GetMissSpelledPosition(absl::string_view key,
-                                       absl::string_view value);
 
   // Returns language model cost of |token| given prediction type |type|.
   // |rid| is the right id of previous word (token).
   // If |rid| is unknown, set 0 as a default value.
-  int GetLMCost(const Result &result, int rid) const;
+  int GetLMCost(const Result& result, int rid) const;
 
   // Given the results aggregated by aggregates, remove
   // miss-spelled results from the |results|.
@@ -198,32 +133,32 @@ class DictionaryPredictor : public PredictorInterface {
   // } else {
   //   do nothing.
   // }
-  static void RemoveMissSpelledCandidates(const ConversionRequest &request,
+  static void RemoveMissSpelledCandidates(const ConversionRequest& request,
                                           absl::Span<Result> results);
 
   // Populate conversion costs to `results`.
-  void RewriteResultsForPrediction(const ConversionRequest &request,
+  void RewriteResultsForPrediction(const ConversionRequest& request,
                                    absl::Span<Result> results) const;
 
   // Scoring function which takes prediction bounus into account.
   // It basically reranks the candidate by lang_prob * (1 + remain_len).
   // This algorithm is mainly used for desktop.
-  void SetPredictionCost(const ConversionRequest &request,
+  void SetPredictionCost(const ConversionRequest& request,
                          absl::Span<Result> results) const;
 
   // Scoring function for mixed conversion.
   // In the mixed conversion we basically use the pure language model-based
   // scoring function. This algorithm is mainly used for mobile.
-  void SetPredictionCostForMixedConversion(const ConversionRequest &request,
+  void SetPredictionCostForMixedConversion(const ConversionRequest& request,
                                            absl::Span<Result> results) const;
 
   // Returns the cost offset for SINGLE_KANJI results.
   // Aggregated SINGLE_KANJI results does not have LM based wcost(word cost),
   // so we want to add the offset based on the other entries.
   int CalculateSingleKanjiCostOffset(
-      const ConversionRequest &request, uint16_t rid,
-      absl::string_view input_key, absl::Span<const Result> results,
-      absl::flat_hash_map<PrefixPenaltyKey, int> *cache) const;
+      const ConversionRequest& request, uint16_t rid,
+      absl::Span<const Result> results,
+      absl::flat_hash_map<PrefixPenaltyKey, int>* cache) const;
 
   // Returns true if the suggestion is classified
   // as "aggressive".
@@ -231,29 +166,25 @@ class DictionaryPredictor : public PredictorInterface {
                                      bool is_suggestion,
                                      size_t total_candidates_size);
 
-  static std::string GetPredictionTypeDebugString(PredictionTypes types);
-
   int CalculatePrefixPenalty(
-      const ConversionRequest &request, absl::string_view input_key,
-      const Result &result,
-      const ImmutableConverterInterface &immutable_converter,
-      absl::flat_hash_map<PrefixPenaltyKey, int> *cache) const;
+      const ConversionRequest& request, const Result& result,
+      absl::flat_hash_map<PrefixPenaltyKey, int>* cache) const;
 
-  std::vector<Result> AggregateTypingCorrectedResults(
-      const ConversionRequest &request) const;
+  std::vector<Result> AggregateTypingCorrectedResultsForMixedConversion(
+      const ConversionRequest& request) const;
 
-  void MaybeApplyPostCorrection(const ConversionRequest &request,
-                                std::vector<Result> &results) const;
+  void MaybeApplyPostCorrection(const ConversionRequest& request,
+                                std::vector<Result>& results) const;
 
-  void MaybeRescoreResults(const ConversionRequest &request,
+  void MaybeRescoreResults(const ConversionRequest& request,
                            absl::Span<Result> results) const;
 
   static void AddRescoringDebugDescription(absl::Span<Result> results);
 
   std::shared_ptr<Result> MaybeGetPreviousTopResult(
-      const Result &current_top_result, const ConversionRequest &request) const;
+      const Result& current_top_result, const ConversionRequest& request) const;
 
-  std::unique_ptr<const prediction::PredictionAggregatorInterface> aggregator_;
+  std::unique_ptr<const DictionaryPredictionAggregatorInterface> aggregator_;
 
   // Previous top result and request key length. (not result length).
   // When the previous and current result are consistent, we still keep showing
@@ -267,16 +198,13 @@ class DictionaryPredictor : public PredictorInterface {
   mutable AtomicSharedPtr<Result> prev_top_result_;
   mutable std::atomic<int32_t> prev_top_key_length_ = 0;
 
-  const ImmutableConverterInterface &immutable_converter_;
-  const Connector &connector_;
-  const Segmenter &segmenter_;
-  const SuggestionFilter &suggestion_filter_;
-  std::unique_ptr<const dictionary::SingleKanjiDictionary>
-      single_kanji_dictionary_;
+  std::unique_ptr<const RealtimeDecoder> decoder_;
+  const Connector& connector_;
+  const Segmenter& segmenter_;
+  const SuggestionFilter& suggestion_filter_;
   const dictionary::PosMatcher pos_matcher_;
   const uint16_t general_symbol_id_;
-  const std::string predictor_name_;
-  const engine::Modules &modules_;
+  const engine::Modules& modules_;
 };
 
 }  // namespace mozc::prediction

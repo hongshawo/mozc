@@ -29,16 +29,15 @@
 
 #include "prediction/result.h"
 
+#include <string>
 #include <tuple>
 
-#include "absl/log/log.h"
+#include "absl/base/nullability.h"
 #include "absl/strings/string_view.h"
-#include "base/absl_nullability.h"
 #include "base/strings/unicode.h"
 #include "composer/query.h"
-#include "converter/candidate.h"
+#include "converter/attribute.h"
 #include "dictionary/dictionary_token.h"
-#include "prediction/zero_query_dict.h"
 
 namespace mozc {
 namespace prediction {
@@ -74,10 +73,10 @@ bool ValueLess(absl::string_view lhs, absl::string_view rhs) {
 
 }  // namespace result_internal
 
-using ::mozc::converter::Candidate;
+using ::mozc::converter::Attribute;
 using ::mozc::dictionary::Token;
 
-void Result::InitializeByTokenAndTypes(const Token &token,
+void Result::InitializeByTokenAndTypes(const Token& token,
                                        PredictionTypes types) {
   SetTypesAndTokenAttributes(types, token.attributes);
   key = token.key;
@@ -92,30 +91,30 @@ void Result::SetTypesAndTokenAttributes(PredictionTypes prediction_types,
   types = prediction_types;
   candidate_attributes = 0;
   if (types & TYPING_CORRECTION) {
-    candidate_attributes |= Candidate::TYPING_CORRECTION;
+    candidate_attributes |= Attribute::TYPING_CORRECTION;
   }
   if (types & (REALTIME | REALTIME_TOP)) {
-    candidate_attributes |= Candidate::REALTIME_CONVERSION;
+    candidate_attributes |= Attribute::REALTIME_CONVERSION;
   }
   if (types & REALTIME_TOP) {
-    candidate_attributes |= Candidate::NO_VARIANTS_EXPANSION;
+    candidate_attributes |= Attribute::NO_VARIANTS_EXPANSION;
   }
   if (types & PREFIX) {
-    candidate_attributes |= Candidate::PARTIALLY_KEY_CONSUMED;
+    candidate_attributes |= Attribute::PARTIALLY_KEY_CONSUMED;
   }
   if (token_attr & Token::SPELLING_CORRECTION) {
-    candidate_attributes |= Candidate::SPELLING_CORRECTION;
+    candidate_attributes |= Attribute::SPELLING_CORRECTION;
   }
   if (token_attr & Token::USER_DICTIONARY) {
     candidate_attributes |=
-        (Candidate::USER_DICTIONARY | Candidate::NO_MODIFICATION |
-         Candidate::NO_VARIANTS_EXPANSION);
+        (Attribute::USER_DICTIONARY | Attribute::NO_MODIFICATION |
+         Attribute::NO_VARIANTS_EXPANSION);
   }
 }
 
 void PopulateTypeCorrectedQuery(
-    const composer::TypeCorrectedQuery &typing_corrected_result,
-    Result *absl_nonnull result) {
+    const composer::TypeCorrectedQuery& typing_corrected_result,
+    Result* absl_nonnull result) {
   if (typing_corrected_result.type & composer::TypeCorrectedQuery::CORRECTION) {
     result->types |= TYPING_CORRECTION;
   }
@@ -129,6 +128,40 @@ void PopulateTypeCorrectedQuery(
   const int adjustment = -1150 * typing_corrected_result.bias;
   result->typing_correction_adjustment = adjustment;
   result->wcost += adjustment;
+}
+
+std::string GetPredictionTypeDebugString(PredictionTypes types) {
+  std::string debug_desc;
+  if (types & PredictionType::UNIGRAM) {
+    debug_desc.append(1, 'U');
+  }
+  if (types & PredictionType::BIGRAM) {
+    debug_desc.append(1, 'B');
+  }
+  if (types & PredictionType::REALTIME_TOP) {
+    debug_desc.append("R1");
+  } else if (types & PredictionType::REALTIME) {
+    debug_desc.append(1, 'R');
+  }
+  if (types & PredictionType::SUFFIX) {
+    debug_desc.append(1, 'S');
+  }
+  if (types & PredictionType::ENGLISH) {
+    debug_desc.append(1, 'E');
+  }
+  if (types & PredictionType::TYPING_CORRECTION) {
+    debug_desc.append(1, 'T');
+  }
+  if (types & PredictionType::TYPING_COMPLETION) {
+    debug_desc.append(1, 'C');
+  }
+  if (types & PredictionType::SUPPLEMENTAL_MODEL) {
+    debug_desc.append(1, 'X');
+  }
+  if (types & PredictionType::KEY_EXPANDED_IN_DICTIONARY) {
+    debug_desc.append(1, 'K');
+  }
+  return debug_desc;
 }
 
 }  // namespace prediction

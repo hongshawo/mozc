@@ -37,16 +37,14 @@
 #include "absl/log/check.h"
 #include "absl/strings/string_view.h"
 #include "base/util.h"
-#include "converter/converter_mock.h"
+#include "converter/candidate.h"
+#include "converter/inner_segment.h"
 #include "converter/segments.h"
 #include "data_manager/testing/mock_data_manager.h"
-#include "engine/engine.h"
-#include "engine/mock_data_engine_factory.h"
 #include "protocol/commands.pb.h"
 #include "request/conversion_request.h"
 #include "request/request_test_util.h"
 #include "rewriter/rewriter_interface.h"
-#include "testing/gmock.h"
 #include "testing/gunit.h"
 #include "testing/mozctest.h"
 #include "testing/test_peer.h"
@@ -55,7 +53,7 @@ namespace mozc {
 
 class SymbolRewriterTestPeer : testing::TestPeer<SymbolRewriter> {
  public:
-  explicit SymbolRewriterTestPeer(SymbolRewriter &rewriter)
+  explicit SymbolRewriterTestPeer(SymbolRewriter& rewriter)
       : testing::TestPeer<SymbolRewriter>(rewriter) {}
 
   PEER_METHOD(RewriteEachCandidate);
@@ -64,30 +62,31 @@ class SymbolRewriterTestPeer : testing::TestPeer<SymbolRewriter> {
 namespace {
 
 void AddSegment(const absl::string_view key, const absl::string_view value,
-                Segments *segments) {
-  Segment *seg = segments->push_back_segment();
+                Segments* segments) {
+  Segment* seg = segments->push_back_segment();
   seg->set_key(key);
-  Segment::Candidate *candidate = seg->add_candidate();
+  converter::Candidate* candidate = seg->add_candidate();
   candidate->value = std::string(value);
   candidate->content_key = std::string(key);
   candidate->content_value = std::string(value);
 }
 
-void AddCandidate(const absl::string_view value, Segment *segment) {
-  Segment::Candidate *candidate = segment->add_candidate();
+void AddCandidate(const absl::string_view value, Segment* segment) {
+  converter::Candidate* candidate = segment->add_candidate();
   candidate->value = std::string(value);
   candidate->content_key = segment->key();
   candidate->content_value = std::string(value);
 }
 
-bool HasCandidateAndDescription(const Segments &segments, int index,
+bool HasCandidateAndDescription(const Segments& segments, int index,
                                 const absl::string_view key,
                                 const absl::string_view description) {
   CHECK_GT(segments.segments_size(), index);
   bool check_description = !description.empty();
 
   for (size_t i = 0; i < segments.segment(index).candidates_size(); ++i) {
-    const Segment::Candidate &candidate = segments.segment(index).candidate(i);
+    const converter::Candidate& candidate =
+        segments.segment(index).candidate(i);
     if (candidate.value == key) {
       if (check_description) {
         bool result = candidate.description == description;
@@ -100,7 +99,7 @@ bool HasCandidateAndDescription(const Segments &segments, int index,
   return false;
 }
 
-bool HasCandidate(const Segments &segments, int index,
+bool HasCandidate(const Segments& segments, int index,
                   const absl::string_view value) {
   return HasCandidateAndDescription(segments, index, value, "");
 }
@@ -216,7 +215,7 @@ TEST_F(SymbolRewriterTest, InsertAfterSingleKanjiAndT13n) {
   {
     Segments segments;
     AddSegment("てん", "てん", &segments);
-    Segment *seg = segments.mutable_segment(0);
+    Segment* seg = segments.mutable_segment(0);
     // Add 15 single-kanji and transliterated candidates
     AddCandidate("点", seg);
     AddCandidate("転", seg);
@@ -237,7 +236,7 @@ TEST_F(SymbolRewriterTest, InsertAfterSingleKanjiAndT13n) {
     EXPECT_TRUE(symbol_rewriter.Rewrite(request, &segments));
     EXPECT_GT(segments.segment(0).candidates_size(), 16);
     for (int i = 0; i < 16; ++i) {
-      const std::string &value = segments.segment(0).candidate(i).value;
+      const std::string& value = segments.segment(0).candidate(i).value;
       EXPECT_FALSE(Util::IsScriptType(value, Util::UNKNOWN_SCRIPT))
           << i << ": " << value;
     }
@@ -254,7 +253,7 @@ TEST_F(SymbolRewriterTest, InsertSymbolsPositionMobileSymbolKey) {
   {
     Segments segments;
     AddSegment("%", "%", &segments);  // segments from symbol key.
-    Segment *seg = segments.mutable_segment(0);
+    Segment* seg = segments.mutable_segment(0);
     // Add predictive candidates.
     AddCandidate("%引き", seg);
     AddCandidate("%増し", seg);
@@ -278,7 +277,7 @@ TEST_F(SymbolRewriterTest, InsertSymbolsPositionMobileAlphabetKey) {
   {
     Segments segments;
     AddSegment("a", "app", &segments);  // segments from alphabet key.
-    Segment *seg = segments.mutable_segment(0);
+    Segment* seg = segments.mutable_segment(0);
     // Add predictive candidates.
     AddCandidate("apple", seg);
     AddCandidate("align", seg);
@@ -299,10 +298,10 @@ TEST_F(SymbolRewriterTest, SetKey) {
   Segments segments;
   const ConversionRequest request;
 
-  Segment *segment = segments.push_back_segment();
+  Segment* segment = segments.push_back_segment();
   const std::string kKey = "てん";
   segment->set_key(kKey);
-  Segment::Candidate *candidate = segment->add_candidate();
+  converter::Candidate* candidate = segment->add_candidate();
   candidate->key = "strange key";
   candidate->value = "strange value";
   candidate->content_key = "strange key";
@@ -339,29 +338,28 @@ TEST_F(SymbolRewriterTest, ExpandSpace) {
   Segments segments;
   const ConversionRequest request;
 
-  Segment *segment = segments.push_back_segment();
+  Segment* segment = segments.push_back_segment();
   segment->set_key(" ");
-  Segment::Candidate *candidate = segment->add_candidate();
+  converter::Candidate* candidate = segment->add_candidate();
   candidate->key = " ";
   candidate->value = " ";
   candidate->content_key = " ";
   candidate->content_value = " ";
-  candidate->PushBackInnerSegmentBoundary(1, 1, 1, 1);
+  candidate->inner_segment_boundary = converter::BuildInnerSegmentBoundary(
+      {{1, 1, 1, 1}}, candidate->key, candidate->value);
 
   EXPECT_TRUE(symbol_rewriter.Rewrite(request, &segments));
   EXPECT_LE(2, segment->candidates_size());
 
-  const Segment::Candidate &cand0 = segment->candidate(0);
+  const converter::Candidate& cand0 = segment->candidate(0);
   EXPECT_EQ(cand0.key, " ");
   EXPECT_EQ(cand0.value, " ");
   EXPECT_EQ(cand0.content_key, " ");
   EXPECT_EQ(cand0.content_value, " ");
   ASSERT_EQ(cand0.inner_segment_boundary.size(), 1);
-  EXPECT_EQ(cand0.inner_segment_boundary[0],
-            Segment::Candidate::EncodeLengths(1, 1, 1, 1));
 
-  const char *kFullWidthSpace = "　";
-  const Segment::Candidate &cand1 = segment->candidate(1);
+  const char* kFullWidthSpace = "　";
+  const converter::Candidate& cand1 = segment->candidate(1);
   EXPECT_EQ(cand1.key, " ");
   EXPECT_EQ(cand1.value, kFullWidthSpace);
   EXPECT_EQ(cand1.content_key, " ");

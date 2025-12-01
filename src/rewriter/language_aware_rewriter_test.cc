@@ -36,6 +36,8 @@
 #include "absl/strings/string_view.h"
 #include "composer/composer.h"
 #include "composer/table.h"
+#include "converter/attribute.h"
+#include "converter/candidate.h"
 #include "converter/segments.h"
 #include "converter/segments_matchers.h"
 #include "data_manager/testing/mock_data_manager.h"
@@ -63,7 +65,7 @@ using ::testing::Return;
 using ::testing::StrEq;
 
 void InsertASCIISequence(const absl::string_view text,
-                         composer::Composer *composer) {
+                         composer::Composer* composer) {
   for (size_t i = 0; i < text.size(); ++i) {
     commands::KeyEvent key;
     key.set_key_code(text[i]);
@@ -73,10 +75,10 @@ void InsertASCIISequence(const absl::string_view text,
 
 class LanguageAwareRewriterTest : public testing::TestWithTempUserProfile {
  protected:
-  bool RewriteWithLanguageAwareInput(const LanguageAwareRewriter *rewriter,
+  bool RewriteWithLanguageAwareInput(const LanguageAwareRewriter* rewriter,
                                      const absl::string_view key,
-                                     bool is_mobile, std::string *composition,
-                                     Segments *segments) {
+                                     bool is_mobile, std::string* composition,
+                                     Segments* segments) {
     commands::Request client_request;
     client_request.set_language_aware_input(
         commands::Request::LANGUAGE_AWARE_SUGGESTION);
@@ -98,7 +100,7 @@ class LanguageAwareRewriterTest : public testing::TestWithTempUserProfile {
     if (segments->conversion_segments_size() == 0) {
       segments->add_segment();
     }
-    Segment *segment = segments->mutable_conversion_segment(0);
+    Segment* segment = segments->mutable_conversion_segment(0);
     segment->set_key(*composition);
     const ConversionRequest request =
         ConversionRequestBuilder()
@@ -113,8 +115,8 @@ class LanguageAwareRewriterTest : public testing::TestWithTempUserProfile {
   const testing::MockDataManager data_manager_;
 };
 
-void PushFrontCandidate(const absl::string_view data, Segment *segment) {
-  Segment::Candidate *candidate = segment->push_front_candidate();
+void PushFrontCandidate(const absl::string_view data, Segment* segment) {
+  converter::Candidate* candidate = segment->push_front_candidate();
   candidate->value = std::string(data);
   candidate->key = std::string(data);
   candidate->content_value = std::string(data);
@@ -122,27 +124,26 @@ void PushFrontCandidate(const absl::string_view data, Segment *segment) {
 }
 
 void PushFrontCandidate(const absl::string_view data, int attributes,
-                        Segment *segment) {
+                        Segment* segment) {
   PushFrontCandidate(data, segment);
   if (attributes) {
     segment->mutable_candidate(0)->attributes |= attributes;
   }
 }
 
-// A matcher for Segment::Candidate to test if a candidate has the given value.
+// A matcher for converter::Candidate to test if a candidate has the given
+// value.
 constexpr auto ValueIs =
-    [](const auto &matcher) -> Matcher<const Segment::Candidate *> {
-  return Field(&Segment::Candidate::value, matcher);
+    [](const auto& matcher) -> Matcher<const converter::Candidate*> {
+  return Field(&converter::Candidate::value, matcher);
 };
 
-// A matcher for Segment::Candidate to test if a candidate has the given value
+// A matcher for converter::Candidate to test if a candidate has the given value
 // with "did you mean" annotation.
 constexpr auto IsLangAwareCandidate =
-    [](absl::string_view value) -> Matcher<const Segment::Candidate *> {
-  return Pointee(AllOf(Field(&Segment::Candidate::key, value),
-                       Field(&Segment::Candidate::value, value),
-                       Field(&Segment::Candidate::prefix, "→ "),
-                       Field(&Segment::Candidate::description, "もしかして")));
+    [](absl::string_view value) -> Matcher<const converter::Candidate*> {
+  return Pointee(AllOf(Field(&converter::Candidate::key, value),
+                       Field(&converter::Candidate::value, value)));
 };
 
 TEST_F(LanguageAwareRewriterTest, LanguageAwareInput) {
@@ -167,7 +168,7 @@ TEST_F(LanguageAwareRewriterTest, LanguageAwareInput) {
     // On mobile, we insert the new candidate at the third position.
     std::string composition;
     Segments segments;
-    Segment *segment = segments.push_back_segment();
+    Segment* segment = segments.push_back_segment();
     PushFrontCandidate("cand3", segment);
     PushFrontCandidate("cand2", segment);
     PushFrontCandidate("cand1", segment);
@@ -185,10 +186,12 @@ TEST_F(LanguageAwareRewriterTest, LanguageAwareInput) {
     // On mobile, the candidate is inserted after the typing correction.
     std::string composition;
     Segments segments;
-    Segment *segment = segments.push_back_segment();
+    Segment* segment = segments.push_back_segment();
     PushFrontCandidate("cand4", segment);
-    PushFrontCandidate("cand3", Segment::Candidate::TYPING_CORRECTION, segment);
-    PushFrontCandidate("cand2", Segment::Candidate::TYPING_CORRECTION, segment);
+    PushFrontCandidate("cand3", converter::Attribute::TYPING_CORRECTION,
+                       segment);
+    PushFrontCandidate("cand2", converter::Attribute::TYPING_CORRECTION,
+                       segment);
     PushFrontCandidate("cand1", segment);
     PushFrontCandidate("cand0", segment);
     ASSERT_EQ(segment->candidates_size(), 5);
@@ -219,7 +222,7 @@ TEST_F(LanguageAwareRewriterTest, LanguageAwareInput) {
     // unlike the above "mozuk" case, "house" should be suggested.
     std::string composition;
     Segments segments;
-    Segment *segment = segments.push_back_segment();
+    Segment* segment = segments.push_back_segment();
     // Add three candidates: ["cand0", "cand1", "cand2"].
     PushFrontCandidate("cand2", segment);
     PushFrontCandidate("cand1", segment);
@@ -344,7 +347,7 @@ TEST_F(LanguageAwareRewriterTest, IsDisabledInTwelveKeyLayout) {
   MockDictionary dictionary;
   LanguageAwareRewriter rewriter(PosMatcher(data_manager_.GetPosMatcherData()),
                                  dictionary);
-  for (const auto &param : kParams) {
+  for (const auto& param : kParams) {
     commands::Request request;
     request.set_language_aware_input(
         commands::Request::LANGUAGE_AWARE_SUGGESTION);

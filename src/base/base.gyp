@@ -95,7 +95,6 @@
       'type': 'static_library',
       'toolsets': ['host', 'target'],
       'sources': [
-        '<(gen_out_dir)/character_set.inc',
         'environ.cc',
         'file/recursive.cc',
         'file/temp_dir.cc',
@@ -115,7 +114,6 @@
       'dependencies': [
         'clock',
         'flags',
-        'gen_character_set#host',
         'hash',
         'singleton',
         'absl.gyp:absl_log',
@@ -241,35 +239,6 @@
       ],
       'dependencies': [
         'absl.gyp:absl_strings',
-      ],
-    },
-    {
-      'target_name': 'gen_character_set',
-      'type': 'none',
-      'toolsets': ['host'],
-      'actions': [
-        {
-          'action_name': 'gen_character_set',
-          'variables': {
-            'input_files': [
-              '<(mozc_oss_src_dir)/data/unicode/JIS0201.TXT',
-              '<(mozc_oss_src_dir)/data/unicode/JIS0208.TXT',
-            ],
-          },
-          'inputs': [
-            'gen_character_set.py',
-            '<@(input_files)',
-          ],
-          'outputs': [
-            '<(gen_out_dir)/character_set.inc',
-          ],
-          'action': [
-            '<(python)', 'gen_character_set.py',
-            '--jisx0201file=<(mozc_oss_src_dir)/data/unicode/JIS0201.TXT',
-            '--jisx0208file=<(mozc_oss_src_dir)/data/unicode/JIS0208.TXT',
-            '--output=<(gen_out_dir)/character_set.inc'
-          ],
-        },
       ],
     },
     {
@@ -421,36 +390,6 @@
       'dependencies': [
         'absl.gyp:absl_strings',
         'base_core',
-      ],
-    },
-    {
-      'target_name': 'crash_report_handler',
-      'type': 'static_library',
-      'sources': [
-        'crash_report_handler.cc',
-      ],
-      'dependencies': [
-        'base',
-        'base.gyp:version',
-      ],
-      'conditions': [
-        ['OS=="win" and branding=="GoogleJapaneseInput"', {
-          'dependencies': [
-            'breakpad',
-          ],
-        }],
-        ['OS=="mac"', {
-          'hard_dependency': 1,
-          'sources': [
-            'crash_report_handler_mac.mm',
-          ],
-          'sources!': [
-            'crash_report_handler.cc',
-          ],
-          'dependencies': [
-            'breakpad',
-          ],
-        }],
       ],
     },
     {

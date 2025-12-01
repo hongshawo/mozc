@@ -32,7 +32,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <ios>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -40,7 +39,6 @@
 #include "absl/random/random.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
 #include "base/file/temp_dir.h"
 #include "base/file_stream.h"
 #include "base/file_util.h"
@@ -184,11 +182,11 @@ TEST_F(UserDictionaryStorageTest, ExportTest) {
   UserDictionaryStorage storage(GetUserDictionaryFile());
   const uint64_t id = storage.CreateDictionary("test").value();
 
-  UserDictionaryStorage::UserDictionary *dic = storage.GetUserDictionary(id);
+  UserDictionaryStorage::UserDictionary* dic = storage.GetUserDictionary(id);
   EXPECT_TRUE(dic);
 
   for (size_t i = 0; i < 1000; ++i) {
-    UserDictionaryStorage::UserDictionaryEntry *entry = dic->add_entries();
+    UserDictionaryStorage::UserDictionaryEntry* entry = dic->add_entries();
     const std::string prefix = std::to_string(static_cast<uint32_t>(i));
     // set empty fields randomly
     entry->set_key(prefix + "key");
@@ -247,9 +245,9 @@ TEST_F(UserDictionaryStorageTest, SerializeTest) {
         const size_t entry_size =
             absl::Uniform(absl::IntervalClosed, random, 1, 100);
         for (size_t j = 0; j < entry_size; ++j) {
-          UserDictionaryStorage::UserDictionary *dic =
+          UserDictionaryStorage::UserDictionary* dic =
               storage1.GetProto().mutable_dictionaries(i);
-          UserDictionaryStorage::UserDictionaryEntry *entry =
+          UserDictionaryStorage::UserDictionaryEntry* entry =
               dic->add_entries();
           constexpr char32_t lo = ' ', hi = '~';
           entry->set_key(random.Utf8StringRandomLen(10, lo, hi));
@@ -300,9 +298,9 @@ TEST_F(UserDictionaryStorageTest, Export) {
   {
     UserDictionaryStorage storage(GetUserDictionaryFile());
     {
-      UserDictionary *dictionary = storage.GetProto().add_dictionaries();
+      UserDictionary* dictionary = storage.GetProto().add_dictionaries();
       dictionary->set_id(kDummyDictionaryId);
-      UserDictionary::Entry *entry = dictionary->add_entries();
+      UserDictionary::Entry* entry = dictionary->add_entries();
       entry->set_key("key");
       entry->set_value("value");
       entry->set_pos(UserDictionary::NOUN);

@@ -32,27 +32,33 @@
 
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "converter/converter_interface.h"
+#include "converter/immutable_converter_interface.h"
+#include "engine/modules.h"
 #include "prediction/predictor_interface.h"
 #include "prediction/result.h"
 #include "request/conversion_request.h"
 
 namespace mozc::prediction {
 
-class BasePredictor : public PredictorInterface {
+class Predictor : public PredictorInterface {
  public:
-  // Initializes the composite of predictor with given sub-predictors.
-  BasePredictor(std::unique_ptr<PredictorInterface> dictionary_predictor,
-                std::unique_ptr<PredictorInterface> user_history_predictor,
-                const ConverterInterface &converter);
+  Predictor() = default;
+  Predictor(const engine::Modules& modules, const ConverterInterface& converter,
+            const ImmutableConverterInterface& immutable_converters);
+  Predictor(std::unique_ptr<PredictorInterface> dictionary_predictor,
+            std::unique_ptr<PredictorInterface> user_history_predictor);
+
+  std::vector<Result> Predict(const ConversionRequest& request) const;
+
+  absl::string_view GetPredictorName() const override { return "Predictor"; }
 
   // Hook(s) for all mutable operations.
-  void Finish(const ConversionRequest &request,
+  void Finish(const ConversionRequest& request,
               absl::Span<const Result> results, uint32_t revert_id) override;
 
   // Reverts the last Finish operation.
@@ -77,62 +83,14 @@ class BasePredictor : public PredictorInterface {
   // Waits for syncer to complete.
   bool Wait() override;
 
- protected:
+ private:
+  std::vector<Result> PredictForDesktop(const ConversionRequest& request) const;
+
+  std::vector<Result> PredictForMixedConversion(
+      const ConversionRequest& request) const;
+
   std::unique_ptr<PredictorInterface> dictionary_predictor_;
   std::unique_ptr<PredictorInterface> user_history_predictor_;
-
- private:
-  const ConverterInterface &converter_;
-};
-
-class DesktopPredictor : public BasePredictor {
- public:
-  static std::unique_ptr<PredictorInterface> CreateDesktopPredictor(
-      std::unique_ptr<PredictorInterface> dictionary_predictor,
-      std::unique_ptr<PredictorInterface> user_history_predictor,
-      const ConverterInterface &converter);
-
-  DesktopPredictor(std::unique_ptr<PredictorInterface> dictionary_predictor,
-                   std::unique_ptr<PredictorInterface> user_history_predictor,
-                   const ConverterInterface &converter);
-  ~DesktopPredictor() override;
-
-  std::vector<Result> Predict(const ConversionRequest &request) const override;
-
-  absl::string_view GetPredictorName() const override {
-    return predictor_name_;
-  }
-
- private:
-  const std::string predictor_name_;
-};
-
-// TODO(taku): Renamed it to more general name, e.g. UnifiedDecoer
-// as we would like to use the same and unified decoder for desktop and
-// mobile.
-class MobilePredictor : public BasePredictor {
- public:
-  static std::unique_ptr<PredictorInterface> CreateMobilePredictor(
-      std::unique_ptr<PredictorInterface> dictionary_predictor,
-      std::unique_ptr<PredictorInterface> user_history_predictor,
-      const ConverterInterface &converter);
-
-  MobilePredictor(std::unique_ptr<PredictorInterface> dictionary_predictor,
-                  std::unique_ptr<PredictorInterface> user_history_predictor,
-                  const ConverterInterface &converter);
-  ~MobilePredictor() override;
-
-  std::vector<Result> Predict(const ConversionRequest &request) const override;
-
-  absl::string_view GetPredictorName() const override {
-    return predictor_name_;
-  }
-
-  static ConversionRequest GetRequestForPredict(
-      const ConversionRequest &request);
-
- private:
-  const std::string predictor_name_;
 };
 
 }  // namespace mozc::prediction

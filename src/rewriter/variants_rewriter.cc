@@ -48,7 +48,9 @@
 #include "base/util.h"
 #include "base/vlog.h"
 #include "config/character_form_manager.h"
+#include "converter/attribute.h"
 #include "converter/candidate.h"
+#include "converter/inner_segment.h"
 #include "converter/segments.h"
 #include "dictionary/pos_matcher.h"
 #include "protocol/commands.pb.h"
@@ -59,6 +61,7 @@ namespace mozc {
 namespace {
 
 using ::mozc::config::CharacterFormManager;
+using ::mozc::converter::Attribute;
 using ::mozc::converter::Candidate;
 using ::mozc::dictionary::PosMatcher;
 
@@ -135,31 +138,27 @@ NumberUtil::NumberString::Style GetStyle(
 
 // static
 void VariantsRewriter::SetDescriptionForCandidate(const PosMatcher pos_matcher,
-                                                  Candidate *candidate) {
-  SetDescription(
-      pos_matcher,
-      (FULL_HALF_WIDTH | CHARACTER_FORM | ZIPCODE | SPELLING_CORRECTION),
-      candidate);
-}
-
-// static
-void VariantsRewriter::SetDescriptionForTransliteration(
-    const PosMatcher pos_matcher, Candidate *candidate) {
-  SetDescription(pos_matcher,
-                 (FULL_HALF_WIDTH | CHARACTER_FORM | SPELLING_CORRECTION),
+                                                  Candidate* candidate) {
+  SetDescription(pos_matcher, (FULL_HALF_WIDTH | CHARACTER_FORM | ZIPCODE),
                  candidate);
 }
 
 // static
+void VariantsRewriter::SetDescriptionForTransliteration(
+    const PosMatcher pos_matcher, Candidate* candidate) {
+  SetDescription(pos_matcher, (FULL_HALF_WIDTH | CHARACTER_FORM), candidate);
+}
+
+// static
 void VariantsRewriter::SetDescriptionForPrediction(const PosMatcher pos_matcher,
-                                                   Candidate *candidate) {
-  SetDescription(pos_matcher, ZIPCODE | SPELLING_CORRECTION, candidate);
+                                                   Candidate* candidate) {
+  SetDescription(pos_matcher, ZIPCODE, candidate);
 }
 
 // static
 std::string VariantsRewriter::GetDescription(const PosMatcher pos_matcher,
                                              int description_type,
-                                             const Candidate &candidate) {
+                                             const Candidate& candidate) {
   absl::string_view character_form_message;
   std::vector<absl::string_view> pieces;
 
@@ -284,43 +283,19 @@ std::string VariantsRewriter::GetDescription(const PosMatcher pos_matcher,
     }
   }
 
-  // The following description tries to overwrite existing description.
-  // TODO(taku): reconsider this behavior.
-  // Spelling Correction description
-  if ((description_type & SPELLING_CORRECTION) &&
-      (candidate.attributes & Candidate::SPELLING_CORRECTION)) {
-    // Append default description because it may contain extra description.
-    if (candidate.description.empty()) {
-      pieces = {kDidYouMean};
-    } else {
-      pieces = {kDidYouMean, candidate.description};
-    }
-  }
   return absl::StrJoin(pieces, " ");
-}
-
-// static
-absl::string_view VariantsRewriter::GetPrefix(const int description_type,
-                                              const Candidate &candidate) {
-  if ((description_type & SPELLING_CORRECTION) &&
-      (candidate.attributes & Candidate::SPELLING_CORRECTION)) {
-    // Add prefix to distinguish this candidate.
-    return "→ ";
-  }
-  return "";
 }
 
 void VariantsRewriter::SetDescription(const PosMatcher pos_matcher,
                                       int description_type,
-                                      Candidate *candidate) {
+                                      Candidate* candidate) {
   // set new description
   candidate->description =
       GetDescription(pos_matcher, description_type, *candidate);
-  candidate->prefix = GetPrefix(description_type, *candidate);
-  candidate->attributes |= Candidate::NO_EXTRA_DESCRIPTION;
+  candidate->attributes |= Attribute::NO_EXTRA_DESCRIPTION;
 }
 
-int VariantsRewriter::capability(const ConversionRequest &request) const {
+int VariantsRewriter::capability(const ConversionRequest& request) const {
   return RewriterInterface::ALL;
 }
 
@@ -403,11 +378,11 @@ VariantsRewriter::GetFormTypesFromStringPair(absl::string_view input1,
 
 VariantsRewriter::AlternativeCandidateResult
 VariantsRewriter::CreateAlternativeCandidate(
-    const Candidate &original_candidate) const {
+    const Candidate& original_candidate) const {
   std::string primary_value, secondary_value;
   std::string primary_content_value, secondary_content_value;
-  std::vector<uint32_t> primary_inner_segment_boundary;
-  std::vector<uint32_t> secondary_inner_segment_boundary;
+  converter::InnerSegmentBoundary primary_inner_segment_boundary;
+  converter::InnerSegmentBoundary secondary_inner_segment_boundary;
 
   AlternativeCandidateResult result;
   if (!GenerateAlternatives(
@@ -424,7 +399,7 @@ VariantsRewriter::CreateAlternativeCandidate(
   const bool is_secondary_half_width = (secondary_form == Util::HALF_WIDTH);
 
   auto get_description_type = [](Util::FormType form) {
-    constexpr int kBaseTypes = CHARACTER_FORM | ZIPCODE | SPELLING_CORRECTION;
+    constexpr int kBaseTypes = CHARACTER_FORM | ZIPCODE;
     switch (form) {
       case Util::FULL_WIDTH:
         return VariantsRewriter::FULL_WIDTH | kBaseTypes;
@@ -467,13 +442,13 @@ VariantsRewriter::CreateAlternativeCandidate(
   return result;
 }
 
-bool VariantsRewriter::RewriteSegment(RewriteType type, Segment *seg) const {
+bool VariantsRewriter::RewriteSegment(RewriteType type, Segment* seg) const {
   CHECK(seg);
   bool modified = false;
 
   // Meta Candidate
-  for (Candidate &candidate : *seg->mutable_meta_candidates()) {
-    if (candidate.attributes & Candidate::NO_EXTRA_DESCRIPTION) {
+  for (Candidate& candidate : *seg->mutable_meta_candidates()) {
+    if (candidate.attributes & Attribute::NO_EXTRA_DESCRIPTION) {
       continue;
     }
     SetDescriptionForTransliteration(pos_matcher_, &candidate);
@@ -481,14 +456,14 @@ bool VariantsRewriter::RewriteSegment(RewriteType type, Segment *seg) const {
 
   // Regular Candidate
   for (size_t i = 0; i < seg->candidates_size(); ++i) {
-    Candidate *original_candidate = seg->mutable_candidate(i);
+    Candidate* original_candidate = seg->mutable_candidate(i);
     DCHECK(original_candidate);
 
-    if (original_candidate->attributes & Candidate::NO_EXTRA_DESCRIPTION) {
+    if (original_candidate->attributes & Attribute::NO_EXTRA_DESCRIPTION) {
       continue;
     }
 
-    if (original_candidate->attributes & Candidate::NO_VARIANTS_EXPANSION) {
+    if (original_candidate->attributes & Attribute::NO_VARIANTS_EXPANSION) {
       SetDescriptionForCandidate(pos_matcher_, original_candidate);
       MOZC_VLOG(1) << "Candidate has NO_NORMALIZATION node";
       continue;
@@ -498,6 +473,12 @@ bool VariantsRewriter::RewriteSegment(RewriteType type, Segment *seg) const {
         CreateAlternativeCandidate(*original_candidate);
     if (result.alternative_candidate == nullptr) {
       SetDescriptionForCandidate(pos_matcher_, original_candidate);
+      continue;
+    }
+
+    if (original_candidate->description.empty() &&
+        original_candidate->attributes & Attribute::USER_HISTORY_PREDICTION) {
+      SetDescriptionForPrediction(pos_matcher_, original_candidate);
       continue;
     }
 
@@ -524,11 +505,11 @@ bool VariantsRewriter::RewriteSegment(RewriteType type, Segment *seg) const {
 // Try generating default and alternative character forms.  Inner segment
 // boundary is taken into account.  When no rewrite happens, false is returned.
 bool VariantsRewriter::GenerateAlternatives(
-    const Candidate &original, std::string *primary_value,
-    std::string *secondary_value, std::string *primary_content_value,
-    std::string *secondary_content_value,
-    std::vector<uint32_t> *primary_inner_segment_boundary,
-    std::vector<uint32_t> *secondary_inner_segment_boundary) const {
+    const Candidate& original, std::string* primary_value,
+    std::string* secondary_value, std::string* primary_content_value,
+    std::string* secondary_content_value,
+    converter::InnerSegmentBoundary* primary_inner_segment_boundary,
+    converter::InnerSegmentBoundary* secondary_inner_segment_boundary) const {
   primary_value->clear();
   secondary_value->clear();
   primary_content_value->clear();
@@ -536,33 +517,8 @@ bool VariantsRewriter::GenerateAlternatives(
   primary_inner_segment_boundary->clear();
   secondary_inner_segment_boundary->clear();
 
-  const config::CharacterFormManager *manager =
+  const config::CharacterFormManager* manager =
       CharacterFormManager::GetCharacterFormManager();
-
-  // TODO(noriyukit): Some rewriter may rewrite key and/or value and make the
-  // inner segment boundary inconsistent.  Ideally, it should always be valid.
-  // Accessing inner segments with broken boundary information is very
-  // dangerous. So here checks the validity.  For invalid candidate, inner
-  // segment boundary is ignored.
-  const bool is_valid = original.IsValid();
-  if (!is_valid) {
-    MOZC_VLOG(2) << "Invalid candidate: " << original.DebugString();
-  }
-  if (original.inner_segment_boundary.empty() || !is_valid) {
-    if (!manager->ConvertConversionStringWithAlternative(
-            original.value, primary_value, secondary_value)) {
-      return false;
-    }
-    if (original.value != original.content_value) {
-      manager->ConvertConversionStringWithAlternative(original.content_value,
-                                                      primary_content_value,
-                                                      secondary_content_value);
-    } else {
-      *primary_content_value = *primary_value;
-      *secondary_content_value = *secondary_value;
-    }
-    return true;
-  }
 
   // When inner segment boundary is present, rewrite each inner segment.  If at
   // least one inner segment is rewritten, the whole segment is considered
@@ -570,8 +526,9 @@ bool VariantsRewriter::GenerateAlternatives(
   bool at_least_one_modified = false;
   std::string inner_primary_value, inner_secondary_value;
   std::string inner_primary_content_value, inner_secondary_content_value;
-  for (Candidate::InnerSegmentIterator iter(&original); !iter.Done();
-       iter.Next()) {
+  converter::InnerSegmentBoundaryBuilder primary_builder, secondary_builder;
+
+  for (const auto& iter : original.inner_segments()) {
     inner_primary_value.clear();
     inner_secondary_value.clear();
     if (!manager->ConvertConversionStringWithAlternative(
@@ -595,18 +552,23 @@ bool VariantsRewriter::GenerateAlternatives(
     absl::StrAppend(secondary_value, inner_secondary_value);
     absl::StrAppend(primary_content_value, inner_primary_content_value);
     absl::StrAppend(secondary_content_value, inner_secondary_content_value);
-    primary_inner_segment_boundary->push_back(Candidate::EncodeLengths(
-        iter.GetKey().size(), inner_primary_value.size(),
-        iter.GetContentKey().size(), inner_primary_content_value.size()));
-    secondary_inner_segment_boundary->push_back(Candidate::EncodeLengths(
-        iter.GetKey().size(), inner_secondary_value.size(),
-        iter.GetContentKey().size(), inner_secondary_content_value.size()));
+    primary_builder.Add(iter.GetKey().size(), inner_primary_value.size(),
+                        iter.GetContentKey().size(),
+                        inner_primary_content_value.size());
+    secondary_builder.Add(iter.GetKey().size(), inner_secondary_value.size(),
+                          iter.GetContentKey().size(),
+                          inner_secondary_content_value.size());
   }
+
+  *primary_inner_segment_boundary =
+      primary_builder.Build(original.key, *primary_value);
+  *secondary_inner_segment_boundary =
+      secondary_builder.Build(original.key, *secondary_value);
   return at_least_one_modified;
 }
 
-void VariantsRewriter::Finish(const ConversionRequest &request,
-                              const Segments &segments) {
+void VariantsRewriter::Finish(const ConversionRequest& request,
+                              const Segments& segments) {
   if (request.config().history_learning_level() !=
       config::Config::DEFAULT_HISTORY) {
     MOZC_VLOG(2) << "history_learning_level is not DEFAULT_HISTORY";
@@ -618,15 +580,15 @@ void VariantsRewriter::Finish(const ConversionRequest &request,
   }
 
   // save character form
-  for (const Segment &segment : segments.conversion_segments()) {
+  for (const Segment& segment : segments.conversion_segments()) {
     if (segment.candidates_size() <= 0 ||
         segment.segment_type() != Segment::FIXED_VALUE ||
-        segment.candidate(0).attributes & Candidate::NO_HISTORY_LEARNING) {
+        segment.candidate(0).attributes & Attribute::NO_HISTORY_LEARNING) {
       continue;
     }
 
-    const Candidate &candidate = segment.candidate(0);
-    if (candidate.attributes & Candidate::NO_VARIANTS_EXPANSION) {
+    const Candidate& candidate = segment.candidate(0);
+    if (candidate.attributes & Attribute::NO_VARIANTS_EXPANSION) {
       continue;
     }
 
@@ -670,8 +632,8 @@ void VariantsRewriter::Clear() {
   CharacterFormManager::GetCharacterFormManager()->ClearHistory();
 }
 
-bool VariantsRewriter::Rewrite(const ConversionRequest &request,
-                               Segments *segments) const {
+bool VariantsRewriter::Rewrite(const ConversionRequest& request,
+                               Segments* segments) const {
   CHECK(segments);
   bool modified = false;
 
@@ -684,7 +646,7 @@ bool VariantsRewriter::Rewrite(const ConversionRequest &request,
     type = EXPAND_VARIANT;
   }
 
-  for (Segment &segment : segments->conversion_segments()) {
+  for (Segment& segment : segments->conversion_segments()) {
     modified |= RewriteSegment(type, &segment);
   }
 

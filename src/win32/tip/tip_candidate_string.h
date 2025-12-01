@@ -27,44 +27,33 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef MOZC_PREDICTION_SINGLE_KANJI_PREDICTION_AGGREGATOR_H_
-#define MOZC_PREDICTION_SINGLE_KANJI_PREDICTION_AGGREGATOR_H_
+#ifndef MOZC_WIN32_TIP_TIP_CANDIDATE_STRING_H_
+#define MOZC_WIN32_TIP_TIP_CANDIDATE_STRING_H_
 
-#include <cstdint>
-#include <memory>
+#include <ctffunc.h>
+
 #include <string>
-#include <vector>
+#include <utility>
 
-#include "absl/strings/string_view.h"
-#include "absl/types/span.h"
-#include "data_manager/data_manager.h"
-#include "dictionary/pos_matcher.h"
-#include "dictionary/single_kanji_dictionary.h"
-#include "prediction/prediction_aggregator_interface.h"
-#include "prediction/result.h"
-#include "request/conversion_request.h"
+#include "absl/base/nullability.h"
+#include "win32/tip/tip_dll_module.h"
 
-namespace mozc::prediction {
+namespace mozc::win32::tsf {
 
-class SingleKanjiPredictionAggregator : public PredictionAggregatorInterface {
+class TipCandidateString : public TipComImplements<ITfCandidateString> {
  public:
-  SingleKanjiPredictionAggregator(const DataManager &data_manager,
-                                  const dictionary::PosMatcher &pos_matcher);
-  ~SingleKanjiPredictionAggregator() override;
+  TipCandidateString(ULONG index, std::wstring value)
+      : index_(index), value_(std::move(value)) {}
 
-  std::vector<Result> AggregateResults(
-      const ConversionRequest &request) const override;
+  // The ITfCandidateString interface methods.
+  STDMETHODIMP GetString(BSTR* absl_nullable str) override;
+  STDMETHODIMP GetIndex(ULONG* absl_nullable index) override;
 
  private:
-  void AppendResults(absl::string_view kanji_key,
-                     absl::string_view original_input_key,
-                     absl::Span<const std::string> kanji_list, int offset,
-                     std::vector<Result> *results) const;
-
-  std::unique_ptr<dictionary::SingleKanjiDictionary> single_kanji_dictionary_;
-  const uint16_t general_symbol_id_ = 0;
+  ULONG index_;
+  std::wstring value_;
 };
 
-}  // namespace mozc::prediction
+}  // namespace mozc::win32::tsf
 
-#endif  // MOZC_PREDICTION_SINGLE_KANJI_PREDICTION_AGGREGATOR_H_
+#endif  // MOZC_WIN32_TIP_TIP_CANDIDATE_STRING_H_
